@@ -275,6 +275,24 @@ ingress:
     enabled: false
     secretName: ""
 
+# ---------------------------------------------------------------------------
+# Gateway (HTTPRoute) - the CubeStack ingress equivalent.
+#
+# Exposes MedRouter under config.BASE_PATH through the shared platform Gateway
+# (the envoy-gateway component of cubestack-operator). Prefer this over
+# `ingress` when the cluster runs Envoy Gateway + Gateway API (the CubeStack
+# platform default).
+# ---------------------------------------------------------------------------
+gateway:
+  enabled: true
+  parent:
+    # The platform Gateway the HTTPRoute attaches to, and its namespace. In a
+    # CubeStack install this is cubestack-gateway in envoy-gateway-system
+    # (the envoy-gateway component); the reference is cross-namespace, so both
+    # must be explicit.
+    name: cubestack-gateway
+    namespace: envoy-gateway-system
+
 # Only rendered when replicaCount > 1: minAvailable=1 would block eviction of a
 # single-replica deployment.
 pdb:

@@ -1,0 +1,53 @@
+{{- if .Values.gateway.enabled }}
+{{- $full := include "medrouter.fullname" . -}}
+{{- $base := include "medrouter.basePath" . -}}
+{{- $port := .Values.service.port -}}
+# HTTPRoute — the gateway (ingress equivalent) that exposes MedRouter under
+# its base path on the CubeStack platform Gateway. Attaches to the shared
+# platform Gateway (cubestack-gateway in envoy-gateway-system, provided by the
+# envoy-gateway component of cubestack-operator). No path is rewritten: the app
+# runs behind BASE_PATH and serves its own SPA and /api/* under that prefix, so
+# the suffix must reach it unchanged.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $full }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.gateway.parent.name | quote }}
+      # The platform Gateway lives in envoy-gateway-system; the reference is
+      # cross-namespace, so the namespace must be spelled out.
+      namespace: {{ .Values.gateway.parent.namespace | quote }}
+  rules:
+    {{- if $base }}
+    # Redirect the exact base path (no trailing slash) so relative links stay
+    # inside the app's prefix, mirroring how cubestack-docs serves its site.
+    - matches:
+        - path:
+            type: Exact
+            value: {{ $base }}
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: {{ printf "%s/" $base }}
+            statusCode: 302
+    {{- end }}
+    # Everything under the base path is forwarded verbatim to the app Service.
+    # The app owns the prefix (BASE_PATH), so no URLRewrite is applied.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ if $base }}{{ $base }}/{{ else }}/{{ end }}
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $full }}
+          port: {{ $port }}
+          weight: 1
+{{- end }}

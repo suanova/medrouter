@@ -326,6 +326,7 @@ jobs:
             --set-string image.tag=ci \
             --set image.pullPolicy=Never \
             --set config.PUBLIC_ORIGIN=http://localhost:3000 \
+            --set gateway.enabled=false \
             --set database.postgres.instances=3 \
             --set database.postgres.resources.requests.cpu=100m \
             --set database.postgres.resources.requests.memory=256Mi \
