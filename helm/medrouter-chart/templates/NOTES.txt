@@ -22,6 +22,20 @@ MedRouter has been deployed as release {{ .Release.Name }} in namespace {{ .Rele
 
    The Ingress serves everything under the path prefix {{ include "medrouter.ingressPath" . }}.
    Make sure DNS for {{ first .Values.ingress.hosts }} points at your ingress controller.
+{{- else if and .Values.gateway.enabled .Values.gateway.hostnames }}
+
+2. Open {{ $origin }}{{ $base }}
+
+   The HTTPRoute {{ $fullname }} serves that prefix on the platform Gateway
+   {{ .Values.gateway.parent.namespace }}/{{ .Values.gateway.parent.name }}.
+   Make sure DNS for {{ first .Values.gateway.hostnames }} points at the Gateway dataplane.
+{{- else if .Values.gateway.enabled }}
+
+2. The HTTPRoute {{ $fullname }} publishes the path prefix
+   {{ include "medrouter.ingressPath" . }} on the platform Gateway
+   {{ .Values.gateway.parent.namespace }}/{{ .Values.gateway.parent.name }}, for every hostname
+   that Gateway serves. Pin it with --set 'gateway.hostnames[0]=<host>' (PUBLIC_ORIGIN
+   is then derived from it; set config.PUBLIC_ORIGIN explicitly for plain HTTP).
 {{- else }}
 
 2. No Ingress is enabled. Use a port-forward (the local port must match

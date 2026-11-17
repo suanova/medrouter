@@ -173,13 +173,14 @@ persistence:
 # ---------------------------------------------------------------------------
 config:
   PORT: "3000"
-  # URL path prefix, e.g. "/medrouter". The Ingress publishes this exact prefix;
-  # no rewrite is applied. Empty means the site root.
+  # URL path prefix, e.g. "/medrouter". The Ingress and the HTTPRoute publish
+  # this exact prefix; no rewrite is applied. Empty means the site root.
   BASE_PATH: ""
   # Browser-visible origin. Empty means: https://<first ingress host> when the
-  # Ingress is enabled, otherwise http://localhost:<PORT>. It MUST match the
-  # address users type in the browser: login POSTs are origin-checked and OAuth
-  # callbacks redirect here.
+  # Ingress is enabled, https://<first gateway hostname> when
+  # gateway.hostnames is set, otherwise http://localhost:<PORT>. It MUST match
+  # the address users type in the browser: login POSTs are origin-checked and
+  # OAuth callbacks redirect here.
   PUBLIC_ORIGIN: ""
   SYSTEM_NAME: MedRouter
 
@@ -292,6 +293,25 @@ gateway:
     # must be explicit.
     name: cubestack-gateway
     namespace: envoy-gateway-system
+  # Hostnames this HTTPRoute answers for. Empty means every hostname the parent
+  # Gateway serves: an HTTPRoute without hostnames matches all of the Gateway's
+  # listeners, not just the one pointing at MedRouter. On a shared platform
+  # Gateway, set the host MedRouter is published under (e.g.
+  # medrouter.example.com) so the route — and the root redirect below — cannot
+  # answer for the platform console or another app on the same Gateway.
+  hostnames: []
+  # Send a bare visit to the Gateway root ("/") to the app, so
+  # https://<host>/ lands on https://<host>/medrouter/ instead of 404ing.
+  # Only rendered when config.BASE_PATH is set: with an empty BASE_PATH the app
+  # already serves "/" and no redirect is needed.
+  #
+  # A redirect is not a rewrite: the browser address bar changes to the target,
+  # so /medrouter stays visible. Use it only when "/" is meant to point at
+  # MedRouter (see README for when the prefix cannot be hidden).
+  rootRedirect:
+    enabled: true
+    # 302 keeps the redirect out of browser caches while paths are changing.
+    statusCode: 302
 
 # Only rendered when replicaCount > 1: minAvailable=1 would block eviction of a
 # single-replica deployment.

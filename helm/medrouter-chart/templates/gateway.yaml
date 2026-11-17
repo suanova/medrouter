@@ -15,6 +15,14 @@ metadata:
   labels:
     {{- include "medrouter.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.gateway.hostnames }}
+  # Scoping the route to MedRouter's own hostname keeps it from matching every
+  # host the shared Gateway serves.
+  hostnames:
+    {{- range . }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
@@ -23,6 +31,26 @@ spec:
       # cross-namespace, so the namespace must be spelled out.
       namespace: {{ .Values.gateway.parent.namespace | quote }}
   rules:
+    {{- if and $base .Values.gateway.rootRedirect.enabled }}
+    # A bare visit to the Gateway root ("/") lands on the app. An app that owns
+    # a prefix cannot answer "/" itself (the Go app 404s outside BASE_PATH), and
+    # redirecting is the only thing the Gateway can do with a path it does not
+    # own — the browser follows it and shows the target path afterwards.
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            # Target the canonical base path with its trailing slash. The exact
+            # match below already redirects "/medrouter" to "/medrouter/", so
+            # pointing here keeps "/" to a single hop.
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: {{ printf "%s/" $base | quote }}
+            statusCode: {{ .Values.gateway.rootRedirect.statusCode }}
+    {{- end }}
     {{- if $base }}
     # Redirect the exact base path (no trailing slash) so relative links stay
     # inside the app's prefix, mirroring how cubestack-docs serves its site.
@@ -35,7 +63,7 @@ spec:
           requestRedirect:
             path:
               type: ReplaceFullPath
-              replaceFullPath: {{ printf "%s/" $base }}
+              replaceFullPath: {{ printf "%s/" $base | quote }}
             statusCode: 302
     {{- end }}
     # Everything under the base path is forwarded verbatim to the app Service.

@@ -66,6 +66,23 @@ jobs:
             exit 1
           fi
 
+      - name: Render the Gateway root redirect
+        run: |
+          set -euo pipefail
+          helm template medrouter helm/medrouter-chart \
+            --set config.BASE_PATH=/medrouter > /tmp/gateway.yaml
+          grep -q "kind: HTTPRoute" /tmp/gateway.yaml
+          # "/" redirects straight to the canonical base path, so a visitor
+          # never takes two hops ("/" -> "/medrouter" -> "/medrouter/").
+          grep -q 'replaceFullPath: "/medrouter/"' /tmp/gateway.yaml
+          grep -A2 "value: /$" /tmp/gateway.yaml | grep -q "RequestRedirect"
+          # Empty BASE_PATH means the app serves "/" itself: no redirect.
+          helm template medrouter helm/medrouter-chart > /tmp/gateway-root.yaml
+          if grep -q "ReplaceFullPath" /tmp/gateway-root.yaml; then
+            echo "unexpected redirect when config.BASE_PATH is empty"
+            exit 1
+          fi
+
       - name: Render model library RBAC
         run: |
           set -euo pipefail
