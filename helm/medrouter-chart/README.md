@@ -36,6 +36,24 @@ kubectl -n medrouter port-forward svc/medrouter 3000:80
 # 打开 http://localhost:3000
 ```
 
+### 部署到域名 + 子路径（生产）
+
+对外暴露到域名、TLS 在平台 Gateway 或前置负载均衡器上终止时，这三个值必须显式设置：
+
+```bash
+helm upgrade --install medrouter ./helm/medrouter-chart \
+  --namespace medrouter --create-namespace \
+  --set config.BASE_PATH=/medrouter \
+  --set config.PUBLIC_ORIGIN=https://www.medrouter.com \
+  --set config.SESSION_COOKIE_SECURE=true
+```
+
+站点地址为 `https://www.medrouter.com/medrouter`。
+
+- `config.PUBLIC_ORIGIN` 只填浏览器地址的**协议 + 域名**，不带路径。注册、登录等写请求会校验 `Origin`，填错会返回 403 `CROSS_ORIGIN_REQUEST`。
+- TLS 在 Gateway/Ingress 之外终止（例如前置负载均衡器）时，chart 推导不出 `https://`，必须像上面这样显式指定。
+- `config.SESSION_COOKIE_SECURE=true` 让 session cookie 只通过 https 下发。`PUBLIC_ORIGIN` 为 https 时留空也会自动为 true，显式写出可避免以后改域名时遗漏。
+
 查看数据库状态：
 
 ```bash
@@ -191,7 +209,7 @@ gateway:
 - HTTPRoute 挂在 `.Values.gateway.parent`（默认 `cubestack-gateway` / `envoy-gateway-system`），即 `envoy-gateway` 组件提供的平台共享 Gateway。已配置 `config.BASE_PATH=/medrouter` 时，站点地址为 `https://<平台>/medrouter`。
 - 与 Ingress 一样不做 rewrite：应用按 `BASE_PATH` 运行，路径原样到达后端 Service。
 - `backendRefs` 指向 chart 自渲染的 Service（名为 release name），端口为 `.Values.service.port`。
-- `gateway.hostnames` 非空时，`config.PUBLIC_ORIGIN` 留空会自动推导为 `https://<第一个 hostname>`（平台 Gateway 终止 TLS）。如果 Gateway 监听的是纯 HTTP（本地端口转发、测试环境），必须显式设置 `config.PUBLIC_ORIGIN`，否则登录会被同源校验拒绝（403 `CROSS_ORIGIN_REQUEST`）。
+- `gateway.hostnames` 非空时，`config.PUBLIC_ORIGIN` 留空会自动推导为 `https://<第一个 hostname>`（平台 Gateway 终止 TLS）。如果 Gateway 监听的是纯 HTTP（本地端口转发、测试环境），必须显式设置 `config.PUBLIC_ORIGIN`（https 场景同时设置 `config.SESSION_COOKIE_SECURE=true`），否则登录会被同源校验拒绝（403 `CROSS_ORIGIN_REQUEST`）。
 - 该 HTTPRoute 需要 Gateway API CRD（由 `envoy-gateway` 组件提供）。目标集群没有 Gateway API 时，用 `--set gateway.enabled=false` 关闭；此环境改用上面的 Ingress。
 
 ### 访问 `/` 自动跳到应用
