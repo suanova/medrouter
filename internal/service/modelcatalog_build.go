@@ -21,6 +21,15 @@ const (
 	annotationUsage       = "medrouter.io/usage-boundary"
 	annotationFeatured    = "medrouter.io/featured"
 
+	// Annotation keys introduced by the medicine bundle annotations. The
+	// multi-valued ones (departments, modalities, tasks, distribution) take a
+	// comma-separated list tuned for the catalog filter.
+	annotationDepartments  = "ai.cubestack.io/departments"
+	annotationModalities   = "ai.cubestack.io/modalities"
+	annotationTasks        = "ai.cubestack.io/tasks"
+	annotationEvidence     = "ai.cubestack.io/evidence"
+	annotationDistribution = "ai.cubestack.io/distribution"
+
 	labelServingMode = "inference.ai.cubestack.io/serving-mode"
 
 	conditionStorageResolved = "StorageResolved"
@@ -144,13 +153,30 @@ func summarizeGroup(group modelGroup, profiles []kube.RuntimeProfile) ModelSumma
 		Architecture:    latest.Spec.Architecture,
 		Quantization:    latest.Spec.Quantization,
 		Task:            annotationText(annotations, annotationTask, 80),
+		Department:      annotationText(annotations, annotationDepartments, 200),
+		Modality:        annotationText(annotations, annotationModalities, 200),
+		Evidence:        annotationText(annotations, annotationEvidence, 80),
 		License:         annotationText(annotations, annotationLicense, 80),
+		Distribution:    annotationText(annotations, annotationDistribution, 120),
+		Departments:     listAnnotation(annotations, annotationDepartments),
+		Modalities:      listAnnotation(annotations, annotationModalities),
+		Tasks:           listAnnotation(annotations, annotationTasks),
+		Distributions:   listAnnotation(annotations, annotationDistribution),
 		UsageBoundary:   annotationText(annotations, annotationUsage, 240),
 		StorageStrategy: latest.Spec.Storage.Strategy,
 		LatestVersion:   latest.Spec.Version,
 		VersionCount:    len(group.versions),
 		Featured:        strings.EqualFold(strings.TrimSpace(annotations[annotationFeatured]), "true"),
 		Tags:            tags(annotations, latest),
+	}
+	if summary.Publisher == "" {
+		summary.Publisher = annotationText(annotations, "ai.cubestack.io/publisher", 120)
+	}
+	if summary.Task == "" {
+		summary.Task = strings.Join(summary.Tasks, ", ")
+	}
+	if summary.License == "" {
+		summary.License = annotationText(annotations, "ai.cubestack.io/license", 80)
 	}
 	if summary.DisplayName == "" {
 		summary.DisplayName = latest.Spec.Model
@@ -450,6 +476,30 @@ func annotationText(annotations map[string]string, key string, limit int) string
 		return ""
 	}
 	return truncateText(stripControl(raw), limit)
+}
+
+// listAnnotation splits a comma-separated annotation value (ASCII ",", Chinese
+// "，", "、" or ";") into a cleaned list of distinct non-empty items.
+func listAnnotation(annotations map[string]string, key string) []string {
+	parts := strings.FieldsFunc(annotations[key], func(r rune) bool {
+		switch r {
+		case ',', '，', '、', ';', '；':
+			return true
+		}
+		return false
+	})
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(stripControl(part))
+		if item == "" {
+			continue
+		}
+		if containsString(out, item) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func stripControl(raw string) string {

@@ -63,7 +63,20 @@ export function DatasetOverviewPanel({ detail }: DatasetOverviewPanelProps) {
         </div>
         <div>
           <span className='ml-b-label'>{t('datasets.fields.sourceRepo')}</span>
-          <p>{detail.source_repo || t('datasets.fields.notAnnotated')}</p>
+          {/^https?:\/\//i.test(detail.source_repo) ? (
+            <p>
+              <a
+                href={detail.source_repo}
+                target='_blank'
+                rel='noreferrer'
+                className='ml-inline-link'
+              >
+                {detail.source_repo}
+              </a>
+            </p>
+          ) : (
+            <p>{detail.source_repo || t('datasets.fields.notAnnotated')}</p>
+          )}
         </div>
       </div>
 

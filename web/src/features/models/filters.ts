@@ -3,14 +3,30 @@ import { DEFAULT_MODEL_SORT, type ModelSort } from './search'
 
 export interface ModelFilterState {
   q?: string
+  department?: string
+  modality?: string
   task?: string
+  evidence?: string
+  publisher?: string
+  license?: string
+  distribution?: string
   arch?: string
   quant?: string
-  license?: string
   usage?: string
 }
 
-export const FACET_KEYS = ['task', 'arch', 'quant', 'license', 'usage'] as const
+export const FACET_KEYS = [
+  'department',
+  'modality',
+  'task',
+  'evidence',
+  'publisher',
+  'license',
+  'distribution',
+  'arch',
+  'quant',
+  'usage',
+] as const
 
 export type FacetKey = (typeof FACET_KEYS)[number]
 
@@ -21,17 +37,37 @@ export interface FacetValue {
 
 export type Facets = Record<FacetKey, FacetValue[]>
 
-const FACET_FIELDS: Record<FacetKey, keyof ModelSummary> = {
-  task: 'task',
+// SINGLE_FACET_FIELDS carry a single string value.
+const SINGLE_FACET_FIELDS: Record<string, keyof ModelSummary> = {
+  evidence: 'evidence',
+  publisher: 'publisher',
   arch: 'architecture',
   quant: 'quantization',
   license: 'license',
   usage: 'usage_boundary',
 }
 
-function facetField(model: ModelSummary, key: FacetKey): string {
-  const raw = model[FACET_FIELDS[key]]
-  return typeof raw === 'string' ? raw.trim() : ''
+// LIST_FACET_FIELDS read an array-valued model field (each element becomes one
+// filter option). task maps to the tasks/list field so multi-task models match
+// any single task value.
+const LIST_FACET_FIELDS: Record<string, keyof ModelSummary> = {
+  department: 'departments',
+  modality: 'modalities',
+  task: 'tasks',
+  distribution: 'distributions',
+}
+
+// facetValues returns the facet values a model contributes for a key: exactly
+// one for single-valued fields, one per element for list fields.
+function facetValues(model: ModelSummary, key: FacetKey): string[] {
+  const listKey = LIST_FACET_FIELDS[key]
+  if (listKey) {
+    const list = model[listKey] as string[] | undefined
+    return (list ?? []).map((v) => v.trim()).filter(Boolean)
+  }
+  const raw = model[SINGLE_FACET_FIELDS[key]]
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  return value ? [value] : []
 }
 
 export function matchesKeywords(model: ModelSummary, query: string | undefined): boolean {
@@ -48,6 +84,10 @@ export function matchesKeywords(model: ModelSummary, query: string | undefined):
     model.license,
     model.usage_boundary,
     ...model.tags,
+    ...(model.departments ?? []),
+    ...(model.modalities ?? []),
+    ...(model.tasks ?? []),
+    ...(model.distributions ?? []),
   ]
     .join(' ')
     .toLowerCase()
@@ -62,7 +102,7 @@ export function filterModels(
     if (!matchesKeywords(model, filters.q)) return false
     for (const key of FACET_KEYS) {
       const wanted = filters[key]?.trim()
-      if (wanted && facetField(model, key) !== wanted) return false
+      if (wanted && !facetValues(model, key).includes(wanted)) return false
     }
     return true
   })
@@ -104,13 +144,16 @@ export function sortModels(
 }
 
 export function buildFacets(models: ModelSummary[]): Facets {
-  const facets: Facets = { task: [], arch: [], quant: [], license: [], usage: [] }
+  const facets: Facets = Object.fromEntries(
+    FACET_KEYS.map((key) => [key, [] as FacetValue[]])
+  ) as Facets
   for (const key of FACET_KEYS) {
     const counts = new Map<string, number>()
     for (const model of models) {
-      const value = facetField(model, key)
-      if (!value) continue
-      counts.set(value, (counts.get(value) ?? 0) + 1)
+      for (const value of facetValues(model, key)) {
+        if (!value) continue
+        counts.set(value, (counts.get(value) ?? 0) + 1)
+      }
     }
     facets[key] = [...counts.entries()]
       .map(([value, count]) => ({ value, count }))

@@ -193,3 +193,41 @@ func TestDatasetVersionNaturalOrder(t *testing.T) {
 		t.Fatalf("order = %#v", detail.Versions)
 	}
 }
+
+func TestDatasetGovernanceReadsAiCubestackAnnotations(t *testing.T) {
+	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	ann := map[string]string{
+		annotationAcquisitionMethod: "公开发布（HuggingFace 镜像 / 作者仓库）",
+		annotationDeIdentification:  "不适用——不含患者个人信息",
+		annotationEthicsBasis:       "无需 IRB；来源为公开医学考试题",
+		annotationSourceRepository:  "https://huggingface.co/datasets/medmcqa/medmcqa",
+	}
+	ds := testDataset("medmcqa-v1", "medmcqa", "v1.0", "JSONL", base, ann)
+	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
+	got := list.Datasets[0]
+	if got.Access != ann[annotationAcquisitionMethod] {
+		t.Fatalf("access = %q", got.Access)
+	}
+	if got.Deidentification != ann[annotationDeIdentification] {
+		t.Fatalf("deidentification = %q", got.Deidentification)
+	}
+	if got.Ethics != ann[annotationEthicsBasis] {
+		t.Fatalf("ethics = %q", got.Ethics)
+	}
+	if got.SourceRepo != ann[annotationSourceRepository] {
+		t.Fatalf("source_repo = %q", got.SourceRepo)
+	}
+}
+
+func TestDatasetGovernancePrefersMedrouterKeys(t *testing.T) {
+	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	ann := map[string]string{
+		annotationAccess:           "public",
+		annotationAcquisitionMethod: "should be ignored",
+	}
+	ds := testDataset("d-v1", "d", "v1.0", "JSONL", base, ann)
+	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
+	if got := list.Datasets[0].Access; got != "public" {
+		t.Fatalf("access = %q", got)
+	}
+}

@@ -1188,6 +1188,16 @@
   overflow-wrap: anywhere;
 }
 
+.ml-inline-link {
+  word-break: break-all;
+  color: var(--ml-accent);
+  text-decoration: none;
+}
+
+.ml-inline-link:hover {
+  text-decoration: underline;
+}
+
 .ml-spec-list {
   margin: 0;
   border-top: 1px solid var(--ml-border);

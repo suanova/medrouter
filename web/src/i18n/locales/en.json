@@ -185,10 +185,15 @@
       "reset": "Reset all filters",
       "all": "All",
       "groups": {
+        "department": "Department",
+        "modality": "Modality",
         "task": "Task",
+        "evidence": "Evidence",
+        "publisher": "Publisher",
+        "license": "License",
+        "distribution": "Distribution",
         "arch": "Architecture",
         "quant": "Quantization",
-        "license": "License",
         "usage": "Usage boundary"
       }
     },
@@ -245,7 +250,11 @@
     },
     "fields": {
       "task": "Task",
+      "department": "Department",
+      "modality": "Modality",
+      "evidence": "Evidence",
       "license": "License",
+      "distribution": "Distribution",
       "usage": "Usage boundary",
       "architecture": "Architecture",
       "quantization": "Quantization",

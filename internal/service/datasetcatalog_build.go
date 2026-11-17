@@ -13,6 +13,13 @@ const (
 	annotationDeidentification = "medrouter.io/deidentification"
 	annotationEthics           = "medrouter.io/ethics"
 	annotationSourceRepo       = "medrouter.io/source-repo"
+
+	// Annotation keys introduced by the medicine bundle annotations. They are
+	// read as fallbacks when the older medrouter.io/* keys are absent.
+	annotationAcquisitionMethod = "ai.cubestack.io/acquisition-method"
+	annotationDeIdentification  = "ai.cubestack.io/de-identification"
+	annotationEthicsBasis       = "ai.cubestack.io/ethics-basis"
+	annotationSourceRepository  = "ai.cubestack.io/source-repository"
 )
 
 // BuildDatasetList projects raw Dataset CRs into the list response. It is pure
@@ -80,10 +87,10 @@ func summarizeDatasetGroup(group datasetGroup) DatasetSummary {
 		Format:           latest.Spec.Format,
 		Task:             annotationText(annotations, annotationTask, 80),
 		License:          annotationText(annotations, annotationLicense, 80),
-		Access:           annotationText(annotations, annotationAccess, 80),
-		Deidentification: annotationText(annotations, annotationDeidentification, 120),
-		Ethics:           annotationText(annotations, annotationEthics, 240),
-		SourceRepo:       annotationText(annotations, annotationSourceRepo, 240),
+		Access:           annotationTextFallback(annotations, 500, annotationAccess, annotationAcquisitionMethod),
+		Deidentification: annotationTextFallback(annotations, 120, annotationDeidentification, annotationDeIdentification),
+		Ethics:           annotationTextFallback(annotations, 240, annotationEthics, annotationEthicsBasis),
+		SourceRepo:       annotationTextFallback(annotations, 240, annotationSourceRepo, annotationSourceRepository),
 		UsageBoundary:    annotationText(annotations, annotationUsage, 240),
 		Size:             strings.TrimSpace(latest.Spec.Size),
 		RecordCount:      copyInt64(latest.Spec.RecordCount),
@@ -187,6 +194,19 @@ func datasetVersionDetail(ds kube.Dataset, latest bool) DatasetVersionDetail {
 		Storage:     storageSummary(ds.Spec.Storage),
 		CreatedAt:   ds.Metadata.CreationTimestamp.UTC(),
 	}
+}
+
+// annotationTextFallback returns the first non-empty annotation among keys.
+func annotationTextFallback(annotations map[string]string, limit int, keys ...string) string {
+	if annotations == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if raw := strings.TrimSpace(annotationText(annotations, key, limit)); raw != "" {
+			return raw
+		}
+	}
+	return ""
 }
 
 func datasetTags(annotations map[string]string, ds kube.Dataset) []string {

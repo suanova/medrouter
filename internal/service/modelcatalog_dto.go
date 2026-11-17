@@ -37,8 +37,16 @@ type ModelSummary struct {
 	Architecture           string    `json:"architecture"`
 	Quantization           string    `json:"quantization"`
 	Task                   string    `json:"task"`
+	Department             string    `json:"department"`
+	Modality               string    `json:"modality"`
+	Evidence               string    `json:"evidence"`
 	License                string    `json:"license"`
+	Distribution           string    `json:"distribution"`
 	Tags                   []string  `json:"tags"`
+	Departments            []string  `json:"departments"`
+	Modalities             []string  `json:"modalities"`
+	Tasks                  []string  `json:"tasks"`
+	Distributions          []string  `json:"distributions"`
 	UsageBoundary          string    `json:"usage_boundary"`
 	StorageStrategy        string    `json:"storage_strategy"`
 	LatestVersion          string    `json:"latest_version"`

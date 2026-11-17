@@ -53,8 +53,28 @@ export function OverviewPanel({ detail }: OverviewPanelProps) {
       </h3>
       <div className='ml-boundary-grid'>
         <div>
+          <span className='ml-b-label'>{t('models.fields.department')}</span>
+          <p>{detail.departments?.join('、') || t('models.fields.notAnnotated')}</p>
+        </div>
+        <div>
+          <span className='ml-b-label'>{t('models.fields.modality')}</span>
+          <p>{detail.modalities?.join('、') || t('models.fields.notAnnotated')}</p>
+        </div>
+        <div>
           <span className='ml-b-label'>{t('models.fields.task')}</span>
-          <p>{detail.task || t('models.fields.notAnnotated')}</p>
+          <p>{detail.tasks?.join('、') || detail.task || t('models.fields.notAnnotated')}</p>
+        </div>
+        <div>
+          <span className='ml-b-label'>{t('models.fields.evidence')}</span>
+          <p>{detail.evidence || t('models.fields.notAnnotated')}</p>
+        </div>
+        <div>
+          <span className='ml-b-label'>{t('models.fields.publisher')}</span>
+          <p>{detail.publisher || t('models.fields.notAnnotated')}</p>
+        </div>
+        <div>
+          <span className='ml-b-label'>{t('models.fields.distribution')}</span>
+          <p>{detail.distributions?.join('、') || t('models.fields.notAnnotated')}</p>
         </div>
         <div>
           <span className='ml-b-label'>{t('models.fields.license')}</span>

@@ -31,7 +31,15 @@ export interface ModelSummary {
   architecture: string
   quantization: string
   task: string
+  department: string
+  modality: string
+  evidence: string
   license: string
+  distribution: string
+  departments: string[]
+  modalities: string[]
+  tasks: string[]
+  distributions: string[]
   tags: string[]
   usage_boundary: string
   storage_strategy: string

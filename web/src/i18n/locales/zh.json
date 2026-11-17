@@ -185,10 +185,15 @@
       "reset": "重置全部筛选",
       "all": "全部",
       "groups": {
+        "department": "科室",
+        "modality": "模态",
         "task": "任务类型",
+        "evidence": "证据",
+        "publisher": "发布者",
+        "license": "协议",
+        "distribution": "交付",
         "arch": "架构",
         "quant": "量化",
-        "license": "许可证",
         "usage": "使用边界"
       }
     },
@@ -245,7 +250,11 @@
     },
     "fields": {
       "task": "任务类型",
+      "department": "科室",
+      "modality": "模态",
+      "evidence": "证据",
       "license": "许可证",
+      "distribution": "交付",
       "usage": "使用边界",
       "architecture": "架构",
       "quantization": "量化",
