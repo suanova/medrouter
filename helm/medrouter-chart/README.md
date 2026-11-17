@@ -171,6 +171,24 @@ helm upgrade --install medrouter ./helm/medrouter-chart \
 
 > 如果 TLS 在 Ingress 之外终止（例如在负载均衡器或 cert-manager 的 ssl-redirect 上），自动推导出的 `PUBLIC_ORIGIN` 可能是 `http://`。此时必须显式设置 `config.PUBLIC_ORIGIN=https://...`，否则登录会被同源校验拒绝（403 `CROSS_ORIGIN_REQUEST`）。
 
+## 使用 Gateway（CubeStack HTTPRoute，默认开启）
+
+在 CubeStack 环境里，chart 走平台 Gateway（Envoy Gateway 的 `cubestack-gateway`）而非每应用一个 Ingress。因此 chart 默认会创建一条 HTTPRoute，把 `${BASE_PATH}` 发布到平台路径：
+
+```yaml
+# values.yaml（默认值）
+gateway:
+  enabled: true          # 默认 true；ingress 默认 false
+  parent:
+    name: cubestack-gateway  # 平台 Gateway 名
+    namespace: envoy-gateway-system
+```
+
+- HTTPRoute 挂在 `.Values.gateway.parent`（默认 `cubestack-gateway` / `envoy-gateway-system`），即 `envoy-gateway` 组件提供的平台共享 Gateway。已配置 `config.BASE_PATH=/medrouter` 时，站点地址为 `https://<平台>/medrouter`。
+- 与 Ingress 一样不做 rewrite：应用按 `BASE_PATH` 运行，路径原样到达后端 Service。
+- `backendRefs` 指向 chart 自渲染的 Service（名为 release name），端口为 `.Values.service.port`。
+- 该 HTTPRoute 需要 Gateway API CRD（由 `envoy-gateway` 组件提供）。目标集群没有 Gateway API 时，用 `--set gateway.enabled=false` 关闭；此环境改用上面的 Ingress。
+
 ## 邮箱验证与 OAuth
 
 默认关闭邮箱验证，新装环境不需要 SMTP。开启时必须同时配置 SMTP，否则 Chart 在渲染阶段就会失败：
@@ -299,6 +317,9 @@ helm install medrouter ./helm/medrouter-chart -n medrouter \
 | `config.REGISTER_ENABLED` | `"true"` | 是否开放注册 |
 | `config.INITIAL_ADMIN_USERNAME` | 空 | 首次启动创建 root 账号的用户名 |
 | `ingress.enabled` | `false` | 是否创建 Ingress |
+| `gateway.enabled` | `true` | 是否创建 Gateway API HTTPRoute（CubeStack 平台） |
+| `gateway.parent.name` | `cubestack-gateway` | HTTPRoute 挂载的平台 Gateway 名 |
+| `gateway.parent.namespace` | `envoy-gateway-system` | 该 Gateway 所在命名空间 |
 | `service.port` | `80` | Service 端口 |
 | `pdb.enabled` / `minAvailable` | `true` / `1` | 仅在应用副本数 > 1 时渲染 |
 | `resources` | 100m/128Mi → 1/512Mi | MedRouter 容器资源 |
