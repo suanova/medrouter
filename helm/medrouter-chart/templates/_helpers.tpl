@@ -63,8 +63,10 @@ Normalized BASE_PATH: "", or "/foo" without a trailing slash.
 
 {{/*
 Browser-visible origin. Configured value wins; otherwise derive it from the
-first Ingress host (https when TLS is enabled), falling back to the port-forward
-address. Login POSTs are origin-checked, so this must match the browser URL.
+first Ingress host (https when TLS is enabled) or, for a Gateway-only install,
+from the first HTTPRoute hostname (the platform Gateway terminates TLS, so
+https). Falls back to the port-forward address. Login POSTs are origin-checked,
+so this must match the browser URL.
 */}}
 {{- define "medrouter.publicOrigin" -}}
 {{- $configured := trim (toString .Values.config.PUBLIC_ORIGIN) -}}
@@ -73,6 +75,8 @@ address. Login POSTs are origin-checked, so this must match the browser URL.
 {{- else if and .Values.ingress.enabled .Values.ingress.hosts -}}
 {{- $scheme := ternary "https" "http" .Values.ingress.tls.enabled -}}
 {{- printf "%s://%s" $scheme (first .Values.ingress.hosts) -}}
+{{- else if and .Values.gateway.enabled .Values.gateway.hostnames -}}
+{{- printf "https://%s" (first .Values.gateway.hostnames) -}}
 {{- else -}}
 {{- printf "http://localhost:%s" (toString .Values.config.PORT) -}}
 {{- end -}}

@@ -178,16 +178,47 @@ helm upgrade --install medrouter ./helm/medrouter-chart \
 ```yaml
 # values.yaml（默认值）
 gateway:
-  enabled: true          # 默认 true；ingress 默认 false
+  enabled: true              # 默认 true；ingress 默认 false
   parent:
     name: cubestack-gateway  # 平台 Gateway 名
     namespace: envoy-gateway-system
+  hostnames: []              # 空 = 该 Gateway 的所有 hostname
+  rootRedirect:
+    enabled: true            # "/" -> "/${BASE_PATH}/"
+    statusCode: 302
 ```
 
 - HTTPRoute 挂在 `.Values.gateway.parent`（默认 `cubestack-gateway` / `envoy-gateway-system`），即 `envoy-gateway` 组件提供的平台共享 Gateway。已配置 `config.BASE_PATH=/medrouter` 时，站点地址为 `https://<平台>/medrouter`。
 - 与 Ingress 一样不做 rewrite：应用按 `BASE_PATH` 运行，路径原样到达后端 Service。
 - `backendRefs` 指向 chart 自渲染的 Service（名为 release name），端口为 `.Values.service.port`。
+- `gateway.hostnames` 非空时，`config.PUBLIC_ORIGIN` 留空会自动推导为 `https://<第一个 hostname>`（平台 Gateway 终止 TLS）。如果 Gateway 监听的是纯 HTTP（本地端口转发、测试环境），必须显式设置 `config.PUBLIC_ORIGIN`，否则登录会被同源校验拒绝（403 `CROSS_ORIGIN_REQUEST`）。
 - 该 HTTPRoute 需要 Gateway API CRD（由 `envoy-gateway` 组件提供）。目标集群没有 Gateway API 时，用 `--set gateway.enabled=false` 关闭；此环境改用上面的 Ingress。
+
+### 访问 `/` 自动跳到应用
+
+`config.BASE_PATH=/medrouter` 时应用只在 `/medrouter` 下提供服务，直接打开 `https://<平台>/` 没有路由可匹配。`gateway.rootRedirect`（默认开启）会渲染一条精确匹配 `/` 的 302 规则：
+
+```yaml
+- matches:
+    - path: {type: Exact, value: /}
+  filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path: {type: ReplaceFullPath, replaceFullPath: /medrouter/}
+        statusCode: 302
+```
+
+目标是带斜杠的规范地址 `/medrouter/`：chart 本来就会把 `/medrouter` 重定向到 `/medrouter/`，直接跳终点少一跳。`config.BASE_PATH` 为空时应用自己就服务 `/`，这条规则不渲染；`--set gateway.rootRedirect.enabled=false` 可关闭。
+
+> ⚠️ 共享 Gateway 注意：不带 `hostnames` 的 HTTPRoute 会匹配父 Gateway 的**所有** hostname。如果平台控制台（或其他应用）也在同一个 Gateway 的 `/` 上，这条规则会把它一起重定向。用 `gateway.hostnames`（例如 `--set 'gateway.hostnames[0]=medrouter.example.com'`）把路由限定到 MedRouter 自己的域名，或者关掉 `rootRedirect`。
+
+### 能不能跳到 `/medrouter` 但地址栏不显示 `medrouter`？
+
+用**重定向**做不到：重定向的定义就是把浏览器地址换成目标地址，地址栏必然出现 `/medrouter`。而且 `/medrouter` 不是纯网关层的修饰，它就是应用的 `BASE_PATH`——前端的 `<base href>`、`/api` 前缀、Cookie Path、OAuth 回调都绑定它，只要 `BASE_PATH=/medrouter`，页面内跳转同样会带出这个前缀。
+
+不想要前缀，只有一种干净做法：**把应用部署在根路径**，即 `config.BASE_PATH=""`。此时 HTTPRoute 发布 `PathPrefix: /`，地址就是 `https://<平台>/`，不需要配置这条重定向。前提是该 Gateway 的 `/` 归 MedRouter；如果必须和其他应用共用同一个域名，路径前缀就是区分应用的路由键，无法隐藏。
+
+（网关侧的 `URLRewrite` 可以让浏览器停在 `/` 而把请求改写到 `/medrouter`，但应用的静态资源、前端路由都以 `BASE_PATH` 为准，两边不一致会出现白屏或 404，chart 不提供这种半改写方案。）
 
 ## 邮箱验证与 OAuth
 
@@ -311,7 +342,7 @@ helm install medrouter ./helm/medrouter-chart -n medrouter \
 | `persistence.size` | `1Gi` | SQLite PVC 容量 |
 | `persistence.retain` | `true` | SQLite PVC 卸载后保留 |
 | `config.BASE_PATH` | 空 | 子路径前缀 |
-| `config.PUBLIC_ORIGIN` | 自动 | 浏览器访问源，必须与真实地址一致 |
+| `config.PUBLIC_ORIGIN` | 自动 | 浏览器访问源；空=按 Ingress host 或 `gateway.hostnames[0]` 推导，都没有则 `localhost:<PORT>` |
 | `config.SESSION_COOKIE_SECURE` | 自动 | 空=按 `PUBLIC_ORIGIN` 是否 https 决定 |
 | `config.TRUSTED_PROXIES` | 空 | 反向代理 CIDR，逗号分隔，用于取得真实客户端 IP |
 | `config.REGISTER_ENABLED` | `"true"` | 是否开放注册 |
@@ -320,6 +351,8 @@ helm install medrouter ./helm/medrouter-chart -n medrouter \
 | `gateway.enabled` | `true` | 是否创建 Gateway API HTTPRoute（CubeStack 平台） |
 | `gateway.parent.name` | `cubestack-gateway` | HTTPRoute 挂载的平台 Gateway 名 |
 | `gateway.parent.namespace` | `envoy-gateway-system` | 该 Gateway 所在命名空间 |
+| `gateway.hostnames` | `[]` | HTTPRoute 绑定的 hostname；空 = 父 Gateway 的所有 hostname |
+| `gateway.rootRedirect.enabled` | `true` | 是否把 `/` 重定向到 `${BASE_PATH}/`（`BASE_PATH` 为空时不渲染） |
 | `service.port` | `80` | Service 端口 |
 | `pdb.enabled` / `minAvailable` | `true` / `1` | 仅在应用副本数 > 1 时渲染 |
 | `resources` | 100m/128Mi → 1/512Mi | MedRouter 容器资源 |
