@@ -1,12 +1,15 @@
 import { queryOptions } from '@tanstack/react-query'
 
+import { CATALOG_RETRY_COUNT, catalogRetryDelay } from '@/lib/catalog-query'
+
 import { DatasetNotFoundError, fetchDatasetDetail, fetchDatasetList } from './api'
 
 export const datasetListQueryOptions = queryOptions({
   queryKey: ['datasets', 'list'],
   queryFn: fetchDatasetList,
   staleTime: 30_000,
-  retry: 1,
+  retry: CATALOG_RETRY_COUNT,
+  retryDelay: catalogRetryDelay,
 })
 
 export function datasetDetailQueryOptions(name: string) {
@@ -15,6 +18,7 @@ export function datasetDetailQueryOptions(name: string) {
     queryFn: () => fetchDatasetDetail(name),
     staleTime: 30_000,
     retry: (failureCount, error) =>
-      !(error instanceof DatasetNotFoundError) && failureCount < 1,
+      !(error instanceof DatasetNotFoundError) && failureCount < CATALOG_RETRY_COUNT,
+    retryDelay: catalogRetryDelay,
   })
 }

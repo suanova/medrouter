@@ -1,12 +1,15 @@
 import { queryOptions } from '@tanstack/react-query'
 
+import { CATALOG_RETRY_COUNT, catalogRetryDelay } from '@/lib/catalog-query'
+
 import { fetchModelDetail, fetchModelList, ModelNotFoundError } from './api'
 
 export const modelListQueryOptions = queryOptions({
   queryKey: ['models', 'list'],
   queryFn: fetchModelList,
   staleTime: 30_000,
-  retry: 1,
+  retry: CATALOG_RETRY_COUNT,
+  retryDelay: catalogRetryDelay,
 })
 
 export function modelDetailQueryOptions(name: string) {
@@ -15,6 +18,7 @@ export function modelDetailQueryOptions(name: string) {
     queryFn: () => fetchModelDetail(name),
     staleTime: 30_000,
     retry: (failureCount, error) =>
-      !(error instanceof ModelNotFoundError) && failureCount < 1,
+      !(error instanceof ModelNotFoundError) && failureCount < CATALOG_RETRY_COUNT,
+    retryDelay: catalogRetryDelay,
   })
 }
