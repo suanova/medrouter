@@ -1847,7 +1847,27 @@
   padding-left: 18px;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 18px;
+  gap: 6px 18px;
+}
+.ml-overview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ml-accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklch, var(--ml-accent) 45%, transparent);
+  padding-bottom: 1px;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.ml-overview-link:hover {
+  color: var(--ml-accent-strong);
+  border-color: currentColor;
+}
+.ml-overview-link-arrow {
+  font-size: 12px;
+  opacity: 0.85;
 }
 .ml-bench-table {
   width: 100%;
