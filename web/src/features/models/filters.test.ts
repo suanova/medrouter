@@ -83,13 +83,18 @@ describe('filterModels', () => {
     expect(filterModels(models, { q: 'google' })).toEqual([models[2]])
   })
 
-  it('combines facets with AND semantics', () => {
-    expect(filterModels(models, { task: 'chat' })).toHaveLength(2)
-    expect(filterModels(models, { task: 'chat', quant: 'bf16' })).toHaveLength(2)
+  it('combines facets with AND semantics and multi-selects with OR', () => {
+    expect(filterModels(models, { task: ['chat'] })).toHaveLength(2)
+    expect(filterModels(models, { task: ['chat', 'text'] })).toHaveLength(3)
     expect(
-      filterModels(models, { task: 'chat', license: 'Apache-2.0', arch: 'gemma' })
-    ).toEqual([models[2]])
-    expect(filterModels(models, { task: 'chat', arch: 'llama' })).toHaveLength(0)
+      filterModels(models, { task: ['chat'], license: ['Apache-2.0'] })
+    ).toHaveLength(2)
+    expect(
+      filterModels(models, { task: ['text'], license: ['Apache-2.0'] })
+    ).toHaveLength(0)
+    expect(
+      filterModels(models, { task: ['chat'], department: ['cardio'] })
+    ).toHaveLength(0)
   })
 })
 
@@ -129,13 +134,17 @@ describe('facets', () => {
       { value: 'chat', count: 2 },
       { value: 'text', count: 1 },
     ])
-    expect(facets.usage).toEqual([])
+    expect(facets.department).toEqual([])
     expect(facets.license[0]).toEqual({ value: 'Apache-2.0', count: 2 })
   })
 
-  it('counts active filters including search', () => {
+  it('counts every selected value plus search', () => {
     expect(activeFilterCount({})).toBe(0)
-    expect(activeFilterCount({ q: 'x', task: 'chat', arch: '' })).toBe(2)
+    expect(activeFilterCount({ q: '  ', task: [] })).toBe(0)
+    expect(activeFilterCount({ q: 'x', task: ['chat'] })).toBe(2)
+    expect(
+      activeFilterCount({ task: ['chat', 'text'], license: ['Apache-2.0'] })
+    ).toBe(3)
   })
 
   it('builds list facets from medicine annotations and filters by membership', () => {
@@ -158,9 +167,12 @@ describe('facets', () => {
     expect(buildFacets(set).department).toContainEqual({ value: 'cardio', count: 1 })
     expect(buildFacets(set).modality).toContainEqual({ value: 'EMR', count: 1 })
     expect(buildFacets(set).evidence).toContainEqual({ value: 'L2', count: 1 })
-    expect(buildFacets(set).distribution).toContainEqual({ value: 'download', count: 1 })
-    expect(filterModels(set, { department: 'cardio' })).toEqual([medical])
-    expect(filterModels(set, { task: 'chat' })).toHaveLength(2)
-    expect(filterModels(set, { task: 'vqa' })).toEqual([medical])
+    expect(filterModels(set, { department: ['cardio'] })).toEqual([medical])
+    expect(filterModels(set, { task: ['chat'] })).toHaveLength(2)
+    expect(filterModels(set, { task: ['vqa'] })).toEqual([medical])
+    expect(filterModels(set, { task: ['chat', 'vqa'] })).toHaveLength(2)
+    expect(
+      filterModels(set, { department: ['cardio'], task: ['vqa'], evidence: ['L2'] })
+    ).toEqual([medical])
   })
 })

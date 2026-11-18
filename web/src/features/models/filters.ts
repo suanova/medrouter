@@ -1,31 +1,28 @@
 import type { ModelSummary } from './types'
 import { DEFAULT_MODEL_SORT, type ModelSort } from './search'
 
+// ModelFilterState holds the multi-select facets. Each facet is a list: a model
+// matches when ANY of its values for that facet is selected (OR inside one
+// facet), and every selected facet must match (AND across facets).
 export interface ModelFilterState {
   q?: string
-  department?: string
-  modality?: string
-  task?: string
-  evidence?: string
-  publisher?: string
-  license?: string
-  distribution?: string
-  arch?: string
-  quant?: string
-  usage?: string
+  department?: string[]
+  modality?: string[]
+  task?: string[]
+  evidence?: string[]
+  license?: string[]
 }
 
+// FACET_KEYS is the curated, user-facing filter set. It is deliberately small:
+// these are the dimensions a medical-model shopper chooses by. Publisher is
+// covered by the free-text search; architecture, quantization, distribution and
+// usage boundary stay on the detail page instead of cluttering the sidebar.
 export const FACET_KEYS = [
   'department',
   'modality',
   'task',
   'evidence',
-  'publisher',
   'license',
-  'distribution',
-  'arch',
-  'quant',
-  'usage',
 ] as const
 
 export type FacetKey = (typeof FACET_KEYS)[number]
@@ -40,11 +37,7 @@ export type Facets = Record<FacetKey, FacetValue[]>
 // SINGLE_FACET_FIELDS carry a single string value.
 const SINGLE_FACET_FIELDS: Record<string, keyof ModelSummary> = {
   evidence: 'evidence',
-  publisher: 'publisher',
-  arch: 'architecture',
-  quant: 'quantization',
   license: 'license',
-  usage: 'usage_boundary',
 }
 
 // LIST_FACET_FIELDS read an array-valued model field (each element becomes one
@@ -54,7 +47,12 @@ const LIST_FACET_FIELDS: Record<string, keyof ModelSummary> = {
   department: 'departments',
   modality: 'modalities',
   task: 'tasks',
-  distribution: 'distributions',
+}
+
+// selectedValues normalizes a facet selection: trims, drops empty entries and
+// tolerates a missing list.
+export function selectedValues(values: string[] | undefined): string[] {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean)
 }
 
 // facetValues returns the facet values a model contributes for a key: exactly
@@ -101,8 +99,10 @@ export function filterModels(
   return models.filter((model) => {
     if (!matchesKeywords(model, filters.q)) return false
     for (const key of FACET_KEYS) {
-      const wanted = filters[key]?.trim()
-      if (wanted && !facetValues(model, key).includes(wanted)) return false
+      const wanted = selectedValues(filters[key])
+      if (wanted.length === 0) continue
+      const values = facetValues(model, key)
+      if (!values.some((value) => wanted.includes(value))) return false
     }
     return true
   })
@@ -164,10 +164,12 @@ export function buildFacets(models: ModelSummary[]): Facets {
   return facets
 }
 
+// activeFilterCount counts every selected value plus the free-text search, so
+// the toolbar badge reflects how many narrowing conditions are in effect.
 export function activeFilterCount(filters: ModelFilterState): number {
   let count = filters.q?.trim() ? 1 : 0
   for (const key of FACET_KEYS) {
-    if (filters[key]?.trim()) count += 1
+    count += selectedValues(filters[key]).length
   }
   return count
 }

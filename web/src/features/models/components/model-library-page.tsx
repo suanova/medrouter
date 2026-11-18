@@ -11,6 +11,7 @@ import {
   buildFacets,
   filterModels,
   hasFacet,
+  selectedValues,
   sortModels,
   type FacetKey,
   type ModelFilterState,
@@ -46,21 +47,31 @@ export function ModelLibraryPage() {
   )
   const [filtersOpen, setFiltersOpen] = useState(false)
 
-  const filters: ModelFilterState = {
-    q: search.q,
-    task: search.task,
-    arch: search.arch,
-    quant: search.quant,
-    license: search.license,
-    usage: search.usage,
-  }
+  const filters: ModelFilterState = useMemo(
+    () => ({
+      q: search.q,
+      department: search.department,
+      modality: search.modality,
+      task: search.task,
+      evidence: search.evidence,
+      license: search.license,
+    }),
+    [
+      search.q,
+      search.department,
+      search.modality,
+      search.task,
+      search.evidence,
+      search.license,
+    ]
+  )
   const sort = resolveSort(search.sort)
   const activeCount = activeFilterCount(filters)
 
   const facets = useMemo(() => buildFacets(data?.models ?? []), [data])
   const visible = useMemo(
     () => sortModels(filterModels(data?.models ?? [], filters), sort),
-    [data, search.q, search.task, search.arch, search.quant, search.license, search.usage, sort]
+    [data, filters, sort]
   )
 
   const updateSearch = (patch: Partial<ModelSearch>) => {
@@ -70,18 +81,39 @@ export function ModelLibraryPage() {
     })
   }
 
-  const updateFacet = (key: FacetKey, value: string | undefined) => {
-    updateSearch({ [key]: value })
+  const setFacet = (key: FacetKey, values: string[]) => {
+    const patch: Partial<ModelSearch> = {}
+    patch[key] = values.length > 0 ? values : undefined
+    updateSearch(patch)
   }
+
+  // Toggling is the multi-select primitive: clicking a selected option removes
+  // it, clicking an unselected one adds it, and a facet leaves the URL only
+  // when its last value is gone.
+  const toggleFacet = (key: FacetKey, value: string) => {
+    const current = selectedValues(filters[key])
+    setFacet(
+      key,
+      current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value]
+    )
+  }
+
+  const clearFacetValue = (key: FacetKey, value: string) => {
+    setFacet(key, selectedValues(filters[key]).filter((item) => item !== value))
+  }
+
+  const clearFacet = (key: FacetKey) => setFacet(key, [])
 
   const resetFilters = () => {
     updateSearch({
       q: undefined,
+      department: undefined,
+      modality: undefined,
       task: undefined,
-      arch: undefined,
-      quant: undefined,
+      evidence: undefined,
       license: undefined,
-      usage: undefined,
     })
   }
 
@@ -173,7 +205,8 @@ export function ModelLibraryPage() {
                     facets={facets}
                     filters={filters}
                     open={filtersOpen}
-                    onChange={updateFacet}
+                    onToggle={toggleFacet}
+                    onClear={clearFacet}
                     onReset={resetFilters}
                     onClose={() => setFiltersOpen(false)}
                   />
@@ -188,11 +221,8 @@ export function ModelLibraryPage() {
                     filtered={activeCount > 0}
                     activeCount={activeCount}
                     filters={filters}
-                    onClear={(key) =>
-                      key === 'q'
-                        ? updateSearch({ q: undefined })
-                        : updateFacet(key, undefined)
-                    }
+                    onClearQuery={() => updateSearch({ q: undefined })}
+                    onClearFacet={clearFacetValue}
                     onReset={resetFilters}
                     sort={sort}
                     onSortChange={(value) =>
