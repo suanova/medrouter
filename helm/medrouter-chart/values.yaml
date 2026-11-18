@@ -44,6 +44,16 @@ modelLibrary:
     # Creates a cluster-scoped read-only ClusterRole and ClusterRoleBinding.
     # CubeStack CRDs are cluster-scoped, so a namespaced Role is not enough.
     create: true
+    # Creates a namespaced Role + RoleBinding (in overviewNamespace) granting
+    # get/list on ConfigMaps, so the model library can read overview content.
+    # The overview ConfigMaps there are labelled medrouter.io/overview=true.
+    overview:
+      create: true
+  # Namespace where model overview ConfigMaps are applied. Must match where the
+  # overview ConfigMaps (data.overview.yaml, label medrouter.io/overview=true)
+  # are installed, and what the running ConfigMap/Deployment passes to
+  # MODEL_LIBRARY_OVERVIEW_NAMESPACE.
+  overviewNamespace: cubestack-system
   cacheTTLSeconds: 30
   requestTimeoutSeconds: 5
 

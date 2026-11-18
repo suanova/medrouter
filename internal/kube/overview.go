@@ -9,7 +9,7 @@ import (
 // OverviewConfigMap decodes only the fields MedRouter needs from a ConfigMap
 // that carries a model overview (the "source file" for the overview tab).
 type OverviewConfigMap struct {
-	Metadata ObjectMeta         `json:"metadata"`
+	Metadata ObjectMeta        `json:"metadata"`
 	Data     map[string]string `json:"data"`
 }
 
@@ -25,19 +25,21 @@ type OverviewSource interface {
 }
 
 const (
-	overviewConfigMapPath = "/api/v1/namespaces/cubestack-system/configmaps"
-	overviewSelectorKey   = "medrouter.io/overview"
+	overviewConfigMapPrefix = "/api/v1/namespaces/"
+	overviewConfigMapSuffix = "/configmaps"
+	overviewSelectorKey     = "medrouter.io/overview"
 )
 
-// ListOverviewConfigMaps returns the overview ConfigMaps in cubestack-system
-// selected by medrouter.io/overview=true.
+// ListOverviewConfigMaps returns the overview ConfigMaps, selected by
+// medrouter.io/overview=true, from the namespace configured on the client.
 func (c *Client) ListOverviewConfigMaps(ctx context.Context) ([]OverviewConfigMap, error) {
 	query := url.Values{
 		"labelSelector": {overviewSelectorKey + "=true"},
 		"limit":         {"500"},
 	}
+	path := overviewConfigMapPrefix + c.overviewNamespace + overviewConfigMapSuffix
 	var body rawList[OverviewConfigMap]
-	if err := c.getJSON(ctx, overviewConfigMapPath+"?"+query.Encode(), &body); err != nil {
+	if err := c.getJSON(ctx, path+"?"+query.Encode(), &body); err != nil {
 		return nil, err
 	}
 	return body.Items, nil

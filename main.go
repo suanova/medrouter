@@ -134,6 +134,7 @@ func newCatalogSource(cfg *config.Config) kube.Source {
 			log.Printf("WARN model library: %v", err)
 			return kube.NoClusterSource
 		}
+		client.SetOverviewNamespace(cfg.ModelLibraryOverviewNamespace)
 		return client
 	}
 	client, err := kube.NewInClusterClient(cfg.ModelLibraryTimeout)
@@ -141,6 +142,7 @@ func newCatalogSource(cfg *config.Config) kube.Source {
 		log.Printf("WARN model library: %v", err)
 		return kube.NoClusterSource
 	}
+	client.SetOverviewNamespace(cfg.ModelLibraryOverviewNamespace)
 	return client
 }
 

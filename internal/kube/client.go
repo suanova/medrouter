@@ -26,6 +26,10 @@ const (
 	runtimeProfilePath = "/apis/ai.cubestack.io/v1alpha1/inferenceruntimeprofiles"
 	datasetPath        = "/apis/ai.cubestack.io/v1alpha1/datasets"
 
+	// defaultOverviewNamespace is where model overview ConfigMaps live unless
+	// overridden via SetOverviewNamespace.
+	defaultOverviewNamespace = "cubestack-system"
+
 	pageLimit   = 500
 	maxPages    = 20
 	maxBodySize = 8 << 20
@@ -65,6 +69,18 @@ type Client struct {
 	httpClient *http.Client
 	token      string
 	tokenFile  string
+
+	// overviewNamespace holds the ConfigMaps that carry model overviews. It
+	// defaults to cubestack-system by way of SetOverviewNamespace.
+	overviewNamespace string
+}
+
+// SetOverviewNamespace sets the namespace MedRouter reads overview ConfigMaps
+// from. An empty value keeps the default (cubestack-system).
+func (c *Client) SetOverviewNamespace(namespace string) {
+	if v := strings.TrimRight(strings.TrimSpace(namespace), "/"); v != "" {
+		c.overviewNamespace = v
+	}
 }
 
 // NewInClusterClient builds a client from the pod's service account. It
@@ -89,8 +105,9 @@ func NewInClusterClient(timeout time.Duration) (*Client, error) {
 	}
 
 	client := &Client{
-		baseURL:   "https://" + net.JoinHostPort(host, port),
-		tokenFile: serviceAccountToken,
+		baseURL:           "https://" + net.JoinHostPort(host, port),
+		tokenFile:         serviceAccountToken,
+		overviewNamespace: defaultOverviewNamespace,
 	}
 	client.httpClient = &http.Client{
 		Timeout: timeout,
@@ -118,7 +135,8 @@ func NewAPIClient(rawURL string, timeout time.Duration) (*Client, error) {
 		return nil, fmt.Errorf("the Kubernetes API URL must use http or https")
 	}
 	return &Client{
-		baseURL: parsed.String(),
+		baseURL:           parsed.String(),
+		overviewNamespace: defaultOverviewNamespace,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
