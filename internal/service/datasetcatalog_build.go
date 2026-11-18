@@ -16,10 +16,12 @@ const (
 
 	// Annotation keys introduced by the medicine bundle annotations. They are
 	// read as fallbacks when the older medrouter.io/* keys are absent.
-	annotationAcquisitionMethod = "ai.cubestack.io/acquisition-method"
-	annotationDeIdentification  = "ai.cubestack.io/de-identification"
-	annotationEthicsBasis       = "ai.cubestack.io/ethics-basis"
-	annotationSourceRepository  = "ai.cubestack.io/source-repository"
+	annotationAcquisitionMethod  = "ai.cubestack.io/acquisition-method"
+	annotationDeIdentification   = "ai.cubestack.io/de-identification"
+	annotationEthicsBasis        = "ai.cubestack.io/ethics-basis"
+	annotationSourceRepository   = "ai.cubestack.io/source-repository"
+	annotationCubestackPublisher = "ai.cubestack.io/publisher"
+	annotationCubestackLicense   = "ai.cubestack.io/license"
 )
 
 // BuildDatasetList projects raw Dataset CRs into the list response. It is pure
@@ -99,6 +101,15 @@ func summarizeDatasetGroup(group datasetGroup) DatasetSummary {
 		VersionCount:     len(group.versions),
 		Featured:         strings.EqualFold(strings.TrimSpace(annotations[annotationFeatured]), "true"),
 		Tags:             datasetTags(annotations, latest),
+	}
+	if summary.Publisher == "" {
+		summary.Publisher = annotationText(annotations, annotationCubestackPublisher, 120)
+	}
+	if summary.License == "" {
+		summary.License = annotationText(annotations, annotationCubestackLicense, 80)
+	}
+	if summary.License == "" {
+		summary.License = metaText(latest.Spec.Meta, "license", 80)
 	}
 	if summary.DisplayName == "" {
 		summary.DisplayName = latest.Spec.Dataset
@@ -207,6 +218,16 @@ func annotationTextFallback(annotations map[string]string, limit int, keys ...st
 		}
 	}
 	return ""
+}
+
+// metaText reads a spec.meta value with the same cleaning and truncation rules
+// as annotationText, so free-form registry keys cannot bypass the limits.
+func metaText(meta map[string]string, key string, limit int) string {
+	raw := strings.TrimSpace(meta[key])
+	if raw == "" {
+		return ""
+	}
+	return truncateText(stripControl(raw), limit)
 }
 
 func datasetTags(annotations map[string]string, ds kube.Dataset) []string {
