@@ -59,7 +59,31 @@ export interface DatasetVersionDetail {
   created_at: string
 }
 
+export interface DatasetOverviewBenchmark {
+  name: string
+  metric: string
+  value: string
+  split?: string
+  source?: string
+}
+
+export interface DatasetOverview {
+  dataset: string
+  description?: string
+  intended_use?: string
+  limitations?: string[]
+  contraindications?: string[]
+  out_of_scope?: string[]
+  benchmarks?: DatasetOverviewBenchmark[]
+  regulatory_status?: string
+  regulatory_note?: string
+  disclaimer?: string
+  links?: Record<string, string>
+  extra?: Record<string, unknown>
+}
+
 export interface DatasetDetail extends DatasetCatalogStatus, DatasetSummary {
   latest_ref: string
   versions: DatasetVersionDetail[]
+  overview?: DatasetOverview
 }

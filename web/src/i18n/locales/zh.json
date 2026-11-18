@@ -418,7 +418,23 @@
       "versionsTitle": "版本历史",
       "descriptionTitle": "数据集简介",
       "sideInfo": "数据集信息",
-      "sideTags": "标签、许可与边界"
+      "sideTags": "标签、许可与边界",
+      "overview": {
+        "descriptionTitle": "数据集简介",
+        "intendedUseTitle": "预期用途",
+        "limitationsTitle": "局限",
+        "contraindicationsTitle": "禁忌",
+        "outOfScopeTitle": "范围外",
+        "benchmarksTitle": "评测基准",
+        "regulatoryTitle": "合规状态",
+        "disclaimerTitle": "免责声明",
+        "linksTitle": "链接",
+        "colDataset": "数据集/基准名",
+        "colMetric": "指标",
+        "colValue": "数值",
+        "colSplit": "切分",
+        "colSource": "来源"
+      }
     },
     "fields": {
       "datasetName": "数据集",

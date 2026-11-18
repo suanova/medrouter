@@ -167,6 +167,7 @@ func newDatasetSource(cfg *config.Config) kube.Source {
 			log.Printf("WARN dataset library: %v", err)
 			return kube.NoClusterSource
 		}
+		client.SetOverviewNamespace(cfg.ModelLibraryOverviewNamespace)
 		return client
 	}
 	client, err := kube.NewInClusterClient(cfg.DatasetLibraryTimeout)
@@ -174,5 +175,6 @@ func newDatasetSource(cfg *config.Config) kube.Source {
 		log.Printf("WARN dataset library: %v", err)
 		return kube.NoClusterSource
 	}
+	client.SetOverviewNamespace(cfg.ModelLibraryOverviewNamespace)
 	return client
 }

@@ -424,7 +424,23 @@
       "versionsTitle": "Version history",
       "descriptionTitle": "Description",
       "sideInfo": "Dataset information",
-      "sideTags": "Tags, license & boundary"
+      "sideTags": "Tags, license & boundary",
+      "overview": {
+        "descriptionTitle": "Description",
+        "intendedUseTitle": "Intended use",
+        "limitationsTitle": "Limitations",
+        "contraindicationsTitle": "Contraindications",
+        "outOfScopeTitle": "Out of scope",
+        "benchmarksTitle": "Benchmarks",
+        "regulatoryTitle": "Regulatory status",
+        "disclaimerTitle": "Disclaimer",
+        "linksTitle": "Links",
+        "colDataset": "Dataset / benchmark",
+        "colMetric": "Metric",
+        "colValue": "Value",
+        "colSplit": "Split",
+        "colSource": "Source"
+      }
     },
     "fields": {
       "datasetName": "Dataset",
