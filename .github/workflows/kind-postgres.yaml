@@ -337,6 +337,10 @@ jobs:
         run: |
           set -euo pipefail
           kubectl create namespace medrouter
+          # The model library reads its overview ConfigMaps from this namespace
+          # (modelLibrary.overviewNamespace), so the Role/RoleBinding the chart
+          # renders there needs the namespace to exist before install.
+          kubectl create namespace cubestack-system --dry-run=client -o yaml | kubectl apply -f -
           helm install medrouter helm/medrouter-chart \
             --namespace medrouter \
             --set image.repository=medrouter \
