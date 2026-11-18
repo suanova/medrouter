@@ -1,0 +1,933 @@
+/* Homepage (P0). Reuses the MedRouter theme tokens; every section degrades to
+ * a usable state when the catalog APIs are unavailable. */
+
+.hm-scope {
+  --hm-bg: var(--background);
+  --hm-fg: var(--foreground);
+  --hm-muted: var(--muted-foreground);
+  --hm-border: var(--border);
+  --hm-card: var(--card);
+  --hm-soft: var(--muted);
+  --hm-accent: var(--primary);
+  --hm-accent-ink: var(--primary-foreground);
+  --hm-radius: var(--radius);
+
+  min-height: 100svh;
+  background: var(--hm-bg);
+  color: var(--hm-fg);
+}
+
+.hm-scope a:focus-visible,
+.hm-scope button:focus-visible,
+.hm-scope input:focus-visible {
+  outline: 2px solid var(--hm-accent);
+  outline-offset: 2px;
+}
+
+.hm-container {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  padding-inline: 28px;
+}
+
+.hm-kicker {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--hm-muted);
+}
+
+/* Hero ------------------------------------------------------------------- */
+
+.hm-hero {
+  padding: 56px 0 40px;
+  border-bottom: 1px solid var(--hm-border);
+}
+
+.hm-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(320px, 5fr);
+  gap: 56px;
+  align-items: start;
+}
+
+.hm-title {
+  margin: 0 0 20px;
+  font-size: clamp(2.6rem, 5vw, 4.4rem);
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+}
+
+.hm-lead {
+  max-width: 640px;
+  margin: 0 0 28px;
+  color: var(--hm-muted);
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+
+.hm-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 620px;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius);
+  background: var(--hm-card);
+}
+
+.hm-search > svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--hm-muted);
+}
+
+.hm-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--hm-fg);
+  font-size: 15px;
+}
+
+.hm-search-btn {
+  flex: none;
+}
+
+.hm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--hm-radius) - 2px);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.hm-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hm-btn-primary {
+  background: var(--hm-accent);
+  color: var(--hm-accent-ink);
+}
+
+.hm-btn-primary:hover {
+  background: color-mix(in oklch, var(--hm-accent) 84%, black);
+}
+
+.hm-btn-secondary {
+  border-color: var(--hm-border);
+  background: transparent;
+  color: var(--hm-fg);
+}
+
+.hm-btn-secondary:hover {
+  background: var(--hm-soft);
+}
+
+.hm-btn-on-dark {
+  background: var(--hm-accent-ink);
+  color: var(--hm-accent);
+}
+
+.hm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 24px;
+}
+
+.hm-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hm-border);
+  border-radius: 999px;
+  background: var(--hm-card);
+  color: var(--hm-muted);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.hm-chip:hover {
+  border-color: var(--hm-muted);
+  color: var(--hm-fg);
+}
+
+.hm-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Passport preview -------------------------------------------------------- */
+
+.hm-hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hm-passport {
+  --pp-bg: var(--hm-fg);
+  --pp-fg: var(--hm-bg);
+
+  display: block;
+  padding: 26px;
+  border: 1px solid color-mix(in oklch, var(--pp-fg) 16%, transparent);
+  border-radius: calc(var(--hm-radius) + 4px);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  text-decoration: none;
+}
+
+.hm-passport .hm-badge {
+  border-color: color-mix(in oklch, var(--pp-fg) 24%, transparent);
+  background: color-mix(in oklch, var(--pp-fg) 10%, transparent);
+  color: var(--pp-fg);
+}
+
+.hm-passport .hm-badge-accent,
+.hm-passport .hm-evidence {
+  border-color: color-mix(in oklch, var(--hm-accent) 45%, transparent);
+  background: color-mix(in oklch, var(--hm-accent) 24%, transparent);
+  color: var(--pp-fg);
+}
+
+.hm-passport-kicker {
+  margin: 18px 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--pp-fg) 62%, transparent);
+}
+
+.hm-passport-name {
+  margin: 0 0 10px;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.hm-passport-use {
+  display: -webkit-box;
+  margin: 0 0 12px;
+  overflow: hidden;
+  color: color-mix(in oklch, var(--pp-fg) 74%, transparent);
+  font-size: 13.5px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.hm-passport-meta {
+  margin: 0 0 14px;
+  color: color-mix(in oklch, var(--pp-fg) 62%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.hm-passport-eval {
+  margin: 0 0 18px;
+  color: color-mix(in oklch, var(--pp-fg) 74%, transparent);
+  font-size: 12.5px;
+}
+
+.hm-passport-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in oklch, var(--pp-fg) 16%, transparent);
+  color: color-mix(in oklch, var(--pp-fg) 62%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.hm-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: var(--hm-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.hm-trust span:not(:last-child)::after {
+  content: '·';
+  margin-left: 16px;
+  color: var(--hm-border);
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+.hm-section {
+  padding: 72px 0;
+  border-bottom: 1px solid var(--hm-border);
+}
+
+.hm-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.hm-section-title {
+  margin: 0 0 8px;
+  font-size: clamp(1.6rem, 2.4vw, 2.2rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.hm-section-lead {
+  max-width: 640px;
+  margin: 0;
+  color: var(--hm-muted);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.hm-section-action {
+  flex: none;
+}
+
+.hm-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--hm-border);
+  color: var(--hm-fg);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+
+.hm-link:hover {
+  border-color: var(--hm-fg);
+}
+
+/* Scenes ------------------------------------------------------------------ */
+
+.hm-scenes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.hm-scene-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius);
+  background: var(--hm-card);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.hm-scene-card:hover {
+  border-color: var(--hm-muted);
+  transform: translateY(-2px);
+}
+
+.hm-scene-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--hm-border);
+  border-radius: 8px;
+  background: var(--hm-soft);
+  color: var(--hm-accent);
+}
+
+.hm-scene-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.hm-scene-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.hm-scene-desc {
+  flex: 1;
+  margin: 0;
+  color: var(--hm-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.hm-scene-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--hm-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.hm-scene-enter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--hm-accent);
+  font-size: 12.5px;
+}
+
+/* Models and datasets ----------------------------------------------------- */
+
+.hm-model-grid,
+.hm-dataset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.hm-model-card,
+.hm-dataset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius);
+  background: var(--hm-card);
+  color: inherit;
+  text-decoration: none;
+}
+
+.hm-model-card:hover,
+.hm-dataset-card:hover {
+  border-color: var(--hm-muted);
+}
+
+.hm-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hm-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--hm-border);
+  border-radius: 6px;
+  background: var(--hm-soft);
+  color: var(--hm-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.hm-badge-accent {
+  border-color: color-mix(in oklch, var(--hm-accent) 30%, var(--hm-border));
+  background: color-mix(in oklch, var(--hm-accent) 12%, transparent);
+  color: var(--hm-accent);
+}
+
+.hm-evidence[data-level^='L0'] {
+  border-color: color-mix(in oklch, var(--destructive) 32%, var(--hm-border));
+  background: color-mix(in oklch, var(--destructive) 14%, transparent);
+  color: var(--destructive);
+}
+
+.hm-evidence[data-level^='L1'] {
+  border-color: color-mix(in oklch, var(--warning) 34%, var(--hm-border));
+  background: color-mix(in oklch, var(--warning) 16%, transparent);
+  color: color-mix(in oklch, var(--warning) 75%, var(--hm-fg));
+}
+
+.hm-evidence[data-level^='L2'] {
+  border-color: color-mix(in oklch, var(--success) 30%, var(--hm-border));
+  background: color-mix(in oklch, var(--success) 14%, transparent);
+  color: color-mix(in oklch, var(--success) 75%, var(--hm-fg));
+}
+
+.hm-evidence[data-level^='L3'] {
+  border-color: color-mix(in oklch, var(--info) 32%, var(--hm-border));
+  background: color-mix(in oklch, var(--info) 14%, transparent);
+  color: color-mix(in oklch, var(--info) 78%, var(--hm-fg));
+}
+
+.hm-evidence[data-level^='L4'] {
+  border-color: color-mix(in oklch, var(--primary) 34%, var(--hm-border));
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  color: var(--hm-accent);
+}
+
+.hm-access.is-public {
+  border-color: color-mix(in oklch, var(--success) 30%, var(--hm-border));
+  background: color-mix(in oklch, var(--success) 14%, transparent);
+  color: color-mix(in oklch, var(--success) 75%, var(--hm-fg));
+}
+
+.hm-access.is-request {
+  border-color: color-mix(in oklch, var(--warning) 34%, var(--hm-border));
+  background: color-mix(in oklch, var(--warning) 16%, transparent);
+  color: color-mix(in oklch, var(--warning) 75%, var(--hm-fg));
+}
+
+.hm-access.is-restricted {
+  border-color: color-mix(in oklch, var(--destructive) 28%, var(--hm-border));
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  color: color-mix(in oklch, var(--destructive) 78%, var(--hm-fg));
+}
+
+.hm-model-name,
+.hm-dataset-name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.hm-model-use {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--hm-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.hm-model-meta,
+.hm-dataset-meta {
+  margin: 0;
+  color: var(--hm-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.hm-model-eval {
+  margin: 0;
+  color: var(--hm-muted);
+  font-size: 12px;
+}
+
+.hm-model-foot,
+.hm-dataset-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--hm-border);
+  color: var(--hm-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* Evaluations ------------------------------------------------------------- */
+
+.hm-eval-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.hm-dimensions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hm-dim {
+  padding: 10px 14px;
+  border: 1px solid var(--hm-border);
+  border-radius: 8px;
+  background: var(--hm-card);
+  font-size: 13px;
+}
+
+.hm-eval-note p {
+  margin: 0 0 8px;
+  color: var(--hm-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.hm-eval-pending {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Delivery steps ---------------------------------------------------------- */
+
+.hm-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.hm-step {
+  padding-top: 14px;
+  border-top: 2px solid var(--hm-fg);
+}
+
+.hm-step-num {
+  color: var(--hm-accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.hm-step h3 {
+  margin: 6px 0;
+  font-size: 1rem;
+}
+
+.hm-step p {
+  margin: 0;
+  color: var(--hm-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.hm-disclaimer {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--hm-border);
+  border-radius: 8px;
+  background: var(--hm-soft);
+  color: var(--hm-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Organizations ----------------------------------------------------------- */
+
+.hm-orgs {
+  padding: 48px 0;
+  border-bottom: 1px solid var(--hm-border);
+}
+
+.hm-orgs-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.hm-orgs-title {
+  margin: 0 0 6px;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.hm-orgs-text {
+  max-width: 640px;
+  margin: 0;
+  color: var(--hm-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* CTA band ---------------------------------------------------------------- */
+
+.hm-cta {
+  padding: 64px 0 80px;
+}
+
+.hm-cta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.hm-cta-card {
+  padding: 28px;
+  border: 1px solid var(--hm-border);
+  border-radius: calc(var(--hm-radius) + 4px);
+  background: var(--hm-card);
+}
+
+.hm-cta-card.is-primary {
+  border-color: var(--hm-accent);
+  background: var(--hm-accent);
+  color: var(--hm-accent-ink);
+}
+
+.hm-cta-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.hm-cta-card p {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  opacity: 0.85;
+}
+
+.hm-cta-card .hm-kicker {
+  color: inherit;
+  opacity: 0.65;
+}
+
+/* Footer ------------------------------------------------------------------ */
+
+.hm-foot {
+  padding: 36px 0;
+  border-top: 1px solid var(--hm-border);
+  background: var(--hm-card);
+}
+
+.hm-foot-inner {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto;
+  gap: 24px;
+  align-items: start;
+}
+
+.hm-brand {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.hm-foot-brand p {
+  max-width: 360px;
+  margin: 6px 0 0;
+  color: var(--hm-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.hm-foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 12.5px;
+}
+
+.hm-foot-links a {
+  color: var(--hm-muted);
+  text-decoration: none;
+}
+
+.hm-foot-links a:hover {
+  color: var(--hm-fg);
+}
+
+.hm-foot-source {
+  align-self: end;
+  color: var(--hm-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* States ------------------------------------------------------------------ */
+
+.hm-skeleton {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--hm-soft),
+    color-mix(in oklch, var(--hm-soft) 55%, var(--hm-border)),
+    var(--hm-soft)
+  );
+  animation: hm-pulse 1.4s ease-in-out infinite;
+}
+
+.hm-skeleton-badges {
+  width: 60%;
+  height: 22px;
+}
+
+.hm-skeleton-title {
+  width: 75%;
+  height: 26px;
+  margin-top: 4px;
+}
+
+.hm-skeleton-line {
+  width: 100%;
+  height: 14px;
+  margin-top: 4px;
+}
+
+.hm-skeleton-line.short {
+  width: 55%;
+}
+
+.hm-model-card.is-placeholder,
+.hm-dataset-card.is-placeholder,
+.hm-passport.is-placeholder {
+  pointer-events: none;
+}
+
+.hm-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius);
+  background: var(--hm-card);
+}
+
+.hm-error p {
+  margin: 0;
+  color: var(--hm-muted);
+  font-size: 13.5px;
+}
+
+@keyframes hm-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hm-skeleton {
+    animation: none;
+  }
+  .hm-scene-card {
+    transition: none;
+  }
+}
+
+/* Responsive -------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .hm-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .hm-scenes,
+  .hm-model-grid,
+  .hm-dataset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hm-eval-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hm-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hm-foot-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .hm-foot-source {
+    align-self: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .hm-container {
+    padding-inline: 18px;
+  }
+
+  .hm-hero {
+    padding-top: 36px;
+  }
+
+  .hm-title {
+    font-size: clamp(2.2rem, 9vw, 3rem);
+  }
+
+  .hm-search {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+
+  .hm-search input {
+    flex: 1 1 160px;
+  }
+
+  .hm-search-btn {
+    width: 100%;
+  }
+
+  .hm-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .hm-chip {
+    flex: none;
+  }
+
+  .hm-section {
+    padding: 48px 0;
+  }
+
+  .hm-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hm-scenes,
+  .hm-model-grid,
+  .hm-dataset-grid,
+  .hm-steps,
+  .hm-cta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hm-orgs-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hm-cta {
+    padding: 48px 0 56px;
+  }
+}

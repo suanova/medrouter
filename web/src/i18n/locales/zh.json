@@ -554,5 +554,167 @@
     "footer": {
       "source": "数据来源 · ModelVersion · Dataset"
     }
+  },
+  "home": {
+    "hero": {
+      "kicker": "MEDICAL AI MODEL EXCHANGE",
+      "title": "先看证据，再选模型。",
+      "lead": "面向医院与药企的医疗医药 AI 准入货架。每份模型护照可机读、可核验；评测与版本绑定；通过统一 SaaS API 接入业务系统。",
+      "searchPlaceholder": "搜索模型、疾病、科室或厂商",
+      "searchButton": "搜索",
+      "browse": "浏览模型广场",
+      "access": "申请接入",
+      "chipsLabel": "热门场景",
+      "chips": {
+        "lung": "肺结节筛查",
+        "pathology": "病理辅助诊断",
+        "chart": "病历质控",
+        "admet": "药物 ADMET"
+      }
+    },
+    "trust": {
+      "models": "{{n}} 个模型",
+      "datasets": "{{n}} 个数据集",
+      "evidence": "L0–L4 证据分级",
+      "delivery": "API-only 交付",
+      "audit": "调用可审计"
+    },
+    "passport": {
+      "kicker": "精选模型护照",
+      "regulatoryUnknown": "监管状态未声明",
+      "evaluationPending": "MedTrust 评测待接入",
+      "api": "SaaS",
+      "download": "下载"
+    },
+    "scenes": {
+      "kicker": "SCENES",
+      "title": "按问题进入",
+      "lead": "医院和药企带着问题来，不带着模型名来。",
+      "models": "{{n}} 个模型",
+      "bestEvidence": "最高证据 {{level}}",
+      "enter": "进入场景",
+      "items": {
+        "lung": {
+          "title": "肺结节筛查",
+          "description": "从 CT 影像到结构化报告，按证据等级选型。"
+        },
+        "pathology": {
+          "title": "病理辅助诊断",
+          "description": "WSI 模型、染色归一化与报告结构化。"
+        },
+        "chart": {
+          "title": "病历生成与质控",
+          "description": "脱敏、幻觉评测、租户隔离后再上线。"
+        },
+        "admet": {
+          "title": "药企 ADMET",
+          "description": "性质预测、毒性与 scaffold split 评测。"
+        }
+      }
+    },
+    "models": {
+      "kicker": "PASSPORT MODELS",
+      "title": "精选护照模型",
+      "lead": "先看证据与场景，再看模型文件。",
+      "viewAll": "查看全部模型",
+      "empty": "模型目录暂不可用。",
+      "retry": "重试"
+    },
+    "evaluations": {
+      "kicker": "MEDTRUST",
+      "title": "评测是商品，不是附属标签。",
+      "lead": "评测与模型版本绑定；默认只接收脱敏数据，支持客户侧评测包。",
+      "apply": "申请联合评测",
+      "levels": "评测数据三级：公开基准 · 医院脱敏数据 · 药企专有数据。",
+      "note": "首批灯塔评测报告接入中。",
+      "dimensions": {
+        "effectiveness": "有效性",
+        "safety": "安全性",
+        "fairness": "公平性",
+        "robustness": "稳健性",
+        "efficiency": "效率",
+        "compliance": "合规",
+        "human": "人机协作"
+      }
+    },
+    "datasets": {
+      "kicker": "TRUSTED DATA",
+      "title": "配套可信数据",
+      "lead": "访问级别、去标识与伦理状态，同样是一等公民。",
+      "viewAll": "浏览数据集",
+      "access": {
+        "public": "公开",
+        "request": "申请",
+        "restricted": "受控"
+      },
+      "deidentification": {
+        "notApplicable": "去标识不适用",
+        "declared": "已去标识",
+        "unknown": "去标识未声明"
+      },
+      "ethics": {
+        "notApplicable": "伦理不适用",
+        "declared": "伦理已声明",
+        "unknown": "伦理未声明"
+      },
+      "records": "{{n}} 条",
+      "unknownPublisher": "未声明发布者"
+    },
+    "delivery": {
+      "kicker": "DELIVERY",
+      "title": "从选型到上线",
+      "lead": "一条路径，不交付私有化。",
+      "steps": {
+        "select": {
+          "title": "选型",
+          "text": "按疾病、科室、任务与证据等级筛选，先看护照。"
+        },
+        "verify": {
+          "title": "核验与评测",
+          "text": "报告与版本绑定；公开基准、医院脱敏数据、药企专有数据三级。"
+        },
+        "authorize": {
+          "title": "申请与授权",
+          "text": "公开 / 受邀 / 机构内 / 商业分级授权，签署数据使用协议。"
+        },
+        "integrate": {
+          "title": "API 接入",
+          "text": "多租户、路由、版本锁定与调用审计；不交付私有化。"
+        }
+      },
+      "disclaimer": "平台不做诊断、不发监管证书、不替代医师或药企的责任；默认不接收原始患者数据。"
+    },
+    "orgs": {
+      "kicker": "ECOSYSTEM",
+      "title": "共建机构与专家",
+      "text": "合作医院、药企与专家评审团招募中。署名背书必须声明利益冲突。",
+      "contact": "联系我们"
+    },
+    "cta": {
+      "kicker": "GET STARTED",
+      "hospital": {
+        "title": "医院 / 药企",
+        "text": "预约演示，评估场景与合规要求。",
+        "button": "申请接入"
+      },
+      "vendor": {
+        "title": "模型厂商",
+        "text": "提交护照字段，进入核验与评测流程。",
+        "button": "上架模型"
+      }
+    },
+    "footer": {
+      "tagline": "医疗医药 AI 的准入货架、体检中心与配送网络。",
+      "linksLabel": "页脚导航",
+      "links": {
+        "models": "模型广场",
+        "datasets": "数据集",
+        "evaluations": "评测",
+        "scenes": "场景包",
+        "privacy": "隐私政策",
+        "terms": "用户协议"
+      },
+      "source": "数据来源 · CubeStack ModelVersion / Dataset"
+    }
   }
 }
