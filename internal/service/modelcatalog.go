@@ -8,6 +8,7 @@ import (
 
 	"github.com/suanova/medrouter/internal/config"
 	"github.com/suanova/medrouter/internal/kube"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -23,6 +24,7 @@ type catalogSnapshot struct {
 	list      *ModelList
 	mvs       []kube.ModelVersion
 	profiles  []kube.RuntimeProfile
+	overviews map[string]*ModelOverview // model -> parsed, validated overview
 	fetchedAt time.Time
 	expiresAt time.Time
 	available bool
@@ -78,6 +80,9 @@ func (c *ModelCatalog) Detail(ctx context.Context, ref string) (*ModelDetail, bo
 	detail, ok := BuildModelDetail(snap.list, snap.mvs, snap.profiles, ref)
 	if !ok {
 		return nil, false
+	}
+	if ov := snap.overviews[detail.Model]; ov != nil && ov.Valid {
+		detail.Overview = ov
 	}
 	return detail, true
 }
@@ -139,13 +144,15 @@ func (c *ModelCatalog) fetch(ctx context.Context) *catalogSnapshot {
 	defer cancel()
 
 	var (
-		mvs      []kube.ModelVersion
-		profiles []kube.RuntimeProfile
-		mvErr    error
-		profErr  error
-		wg       sync.WaitGroup
+		mvs       []kube.ModelVersion
+		profiles  []kube.RuntimeProfile
+		ovModels  []kube.OverviewConfigMap
+		mvErr     error
+		profErr   error
+		ovErr     error
+		wg        sync.WaitGroup
 	)
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		mvs, mvErr = c.source.ListModelVersions(ctx)
@@ -153,6 +160,12 @@ func (c *ModelCatalog) fetch(ctx context.Context) *catalogSnapshot {
 	go func() {
 		defer wg.Done()
 		profiles, profErr = c.source.ListRuntimeProfiles(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		if os, ok := c.source.(kube.OverviewSource); ok {
+			ovModels, ovErr = os.ListOverviewConfigMaps(ctx)
+		}
 	}()
 	wg.Wait()
 
@@ -182,10 +195,53 @@ func (c *ModelCatalog) fetch(ctx context.Context) *catalogSnapshot {
 		list:      list,
 		mvs:       mvs,
 		profiles:  profiles,
+		overviews: buildOverviews(ovModels, mvs, ovErr, now),
 		fetchedAt: now,
 		expiresAt: now.Add(c.ttl),
 		available: true,
 	}
+}
+
+// buildOverviews indexes overview ConfigMaps by ModelVersion spec.model, keeping
+// only those that match an existing model and pass anchor validation. The
+// matching must be exact (model strong-validation). Overview errors are not
+// fatal; at worst overviews is empty and the overview tab shows core fields.
+func buildOverviews(cms []kube.OverviewConfigMap, mvs []kube.ModelVersion, ovErr error, now time.Time) map[string]*ModelOverview {
+	out := map[string]*ModelOverview{}
+	if ovErr != nil {
+		return out
+	}
+	modelSet := map[string]struct{}{}
+	for _, mv := range mvs {
+		modelSet[mv.Spec.Model] = struct{}{}
+	}
+	for _, cm := range cms {
+		body, ok := cm.OverviewBody()
+		if !ok {
+			continue
+		}
+		// The model anchor is unknown until parsed; we still need the model name
+		// to index. Parse returns the anchored ModelOverview, so synthesize a
+		// candidate by attempting parse with each known model would be wrong.
+		// Instead, the body's own model field decides the key; if it matches a
+		// known model we accept, otherwise it is dropped (INVALID_MODEL_OVERVIEW).
+		var probe struct {
+			Model string `yaml:"model"`
+		}
+		_ = yaml.Unmarshal([]byte(body), &probe)
+		if probe.Model == "" {
+			continue
+		}
+		if _, known := modelSet[probe.Model]; !known {
+			continue
+		}
+		ov, err := ParseModelOverview(body, probe.Model)
+		if err != nil || !ov.Valid {
+			continue
+		}
+		out[probe.Model] = ov
+	}
+	return out
 }
 
 func (c *ModelCatalog) staleWindow() time.Duration {

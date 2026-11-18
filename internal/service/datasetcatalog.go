@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/suanova/medrouter/internal/config"
 	"github.com/suanova/medrouter/internal/kube"
 )
@@ -14,6 +16,7 @@ import (
 type datasetSnapshot struct {
 	list      *DatasetList
 	datasets  []kube.Dataset
+	overviews map[string]*DatasetOverview // dataset -> parsed, validated overview
 	fetchedAt time.Time
 	expiresAt time.Time
 	available bool
@@ -69,6 +72,9 @@ func (c *DatasetCatalog) Detail(ctx context.Context, ref string) (*DatasetDetail
 	detail, ok := BuildDatasetDetail(snap.list, snap.datasets, ref)
 	if !ok {
 		return nil, false
+	}
+	if ov := snap.overviews[detail.Dataset]; ov != nil && ov.Valid {
+		detail.Overview = ov
 	}
 	return detail, true
 }
@@ -129,11 +135,29 @@ func (c *DatasetCatalog) fetch(ctx context.Context) *datasetSnapshot {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	datasets, err := c.source.ListDatasets(ctx)
+	var (
+		datasets []kube.Dataset
+		ovs      []kube.OverviewConfigMap
+		dsErr    error
+		ovErr    error
+		wg       sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		datasets, dsErr = c.source.ListDatasets(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		if os, ok := c.source.(kube.OverviewSource); ok {
+			ovs, ovErr = os.ListOverviewConfigMaps(ctx)
+		}
+	}()
+	wg.Wait()
 
 	now := c.now()
-	if err != nil {
-		reason, retryable := statusFromError(err)
+	if dsErr != nil {
+		reason, retryable := statusFromError(dsErr)
 		return &datasetSnapshot{
 			list: &DatasetList{
 				DatasetCatalogStatus: DatasetCatalogStatus{
@@ -153,10 +177,47 @@ func (c *DatasetCatalog) fetch(ctx context.Context) *datasetSnapshot {
 	return &datasetSnapshot{
 		list:      BuildDatasetList(datasets, now),
 		datasets:  datasets,
+		overviews: buildDatasetOverviews(ovs, datasets, ovErr),
 		fetchedAt: now,
 		expiresAt: now.Add(c.ttl),
 		available: true,
 	}
+}
+
+// buildDatasetOverviews indexes dataset overview ConfigMaps by Dataset.spec.dataset,
+// keeping only those that match an existing dataset and pass anchor validation.
+// The match must be exact (dataset strong-validation). Overview errors are not
+// fatal; at worst overviews is empty and the overview area shows core fields.
+func buildDatasetOverviews(cms []kube.OverviewConfigMap, datasets []kube.Dataset, ovErr error) map[string]*DatasetOverview {
+	out := map[string]*DatasetOverview{}
+	if ovErr != nil {
+		return out
+	}
+	set := map[string]struct{}{}
+	for _, ds := range datasets {
+		set[ds.Spec.Dataset] = struct{}{}
+	}
+	for _, cm := range cms {
+		body, ok := cm.OverviewBody()
+		if !ok {
+			continue
+		}
+		var probe struct {
+			Dataset string `yaml:"dataset"`
+		}
+		if err := yaml.Unmarshal([]byte(body), &probe); err != nil || probe.Dataset == "" {
+			continue
+		}
+		if _, known := set[probe.Dataset]; !known {
+			continue
+		}
+		ov, err := ParseDatasetOverview(body, probe.Dataset)
+		if err != nil || !ov.Valid {
+			continue
+		}
+		out[probe.Dataset] = ov
+	}
+	return out
 }
 
 func (c *DatasetCatalog) staleWindow() time.Duration {

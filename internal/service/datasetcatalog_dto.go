@@ -67,4 +67,8 @@ type DatasetDetail struct {
 	DatasetSummary
 	LatestRef string                 `json:"latest_ref"`
 	Versions  []DatasetVersionDetail `json:"versions"`
+	// Overview is the long-form dataset overview read from a ConfigMap, when one
+	// is published and passes the dataset anchor validation. Invalid / missing
+	// overviews leave this nil and the overview area shows core fields only.
+	Overview *DatasetOverview `json:"overview,omitempty"`
 }

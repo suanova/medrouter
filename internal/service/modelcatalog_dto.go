@@ -37,8 +37,16 @@ type ModelSummary struct {
 	Architecture           string    `json:"architecture"`
 	Quantization           string    `json:"quantization"`
 	Task                   string    `json:"task"`
+	Department             string    `json:"department"`
+	Modality               string    `json:"modality"`
+	Evidence               string    `json:"evidence"`
 	License                string    `json:"license"`
+	Distribution           string    `json:"distribution"`
 	Tags                   []string  `json:"tags"`
+	Departments            []string  `json:"departments"`
+	Modalities             []string  `json:"modalities"`
+	Tasks                  []string  `json:"tasks"`
+	Distributions          []string  `json:"distributions"`
 	UsageBoundary          string    `json:"usage_boundary"`
 	StorageStrategy        string    `json:"storage_strategy"`
 	LatestVersion          string    `json:"latest_version"`
@@ -129,4 +137,9 @@ type ModelDetail struct {
 	Versions           []ModelVersionDetail    `json:"versions"`
 	CompatibleProfiles []RuntimeProfileSummary `json:"compatible_profiles"`
 	UsedBy             []UsedByRef             `json:"used_by"`
+	// Overview is the long-form model overview read from a ConfigMap, when one
+	// exists and passes model-anchor validation. It is optional: missing or
+	// invalid overviews leave this nil and the overview tab shows core fields
+	// only. Identity and filter facets are not duplicated here.
+	Overview *ModelOverview `json:"overview,omitempty"`
 }

@@ -1,33 +1,148 @@
 import { useTranslation } from 'react-i18next'
 
-import { formatNumber } from '@/features/models/format'
-
-import { storageSummaryText } from '../labels'
-import type { DatasetDetail } from '../types'
+import type { DatasetDetail, DatasetOverview } from '../types'
 
 interface DatasetOverviewPanelProps {
   detail: DatasetDetail
 }
 
-export function DatasetOverviewPanel({ detail }: DatasetOverviewPanelProps) {
-  const { t, i18n } = useTranslation()
-  const locale = i18n.language.startsWith('zh') ? 'zh' : 'en'
-  const latest = detail.versions.find((version) => version.is_latest)
+function LongFormDatasetOverview({ overview }: { overview: DatasetOverview }) {
+  const { t } = useTranslation()
 
-  const specs: [string, string][] = latest
-    ? [
-        [t('datasets.fields.format'), latest.format || '—'],
-        [t('datasets.fields.size'), latest.size || '—'],
-        [
-          t('datasets.fields.records'),
-          latest.record_count != null
-            ? formatNumber(latest.record_count, locale)
-            : '—',
-        ],
-        [t('datasets.fields.storage'), storageSummaryText(latest.storage, t)],
-        [t('datasets.fields.latest'), detail.latest_version || '—'],
-      ]
-    : []
+  const listBlock = (title: string, items?: string[]) =>
+    items?.length ? (
+      <div>
+        <span className='ml-b-label'>{title}</span>
+        <ul className='ml-overview-list'>
+          {items.map((it, i) => (
+            <li key={i}>{it}</li>
+          ))}
+        </ul>
+      </div>
+    ) : null
+
+  return (
+    <div className='ml-overview-body'>
+      {overview.description ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>
+            {t('datasets.detail.overview.descriptionTitle')}
+          </h3>
+          <p className='ml-overview-para'>{overview.description}</p>
+        </section>
+      ) : null}
+
+      {overview.intended_use ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>
+            {t('datasets.detail.overview.intendedUseTitle')}
+          </h3>
+          <p className='ml-overview-para'>{overview.intended_use}</p>
+        </section>
+      ) : null}
+
+      {overview.limitations?.length ||
+      overview.contraindications?.length ||
+      overview.out_of_scope?.length ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>{t('datasets.detail.boundaryTitle')}</h3>
+          <div className='ml-overview-grid'>
+            {listBlock(
+              t('datasets.detail.overview.limitationsTitle'),
+              overview.limitations,
+            )}
+            {listBlock(
+              t('datasets.detail.overview.contraindicationsTitle'),
+              overview.contraindications,
+            )}
+            {listBlock(
+              t('datasets.detail.overview.outOfScopeTitle'),
+              overview.out_of_scope,
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {overview.benchmarks?.length ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>
+            {t('datasets.detail.overview.benchmarksTitle')}
+          </h3>
+          <table className='ml-bench-table'>
+            <thead>
+              <tr>
+                <th>{t('datasets.detail.overview.colDataset')}</th>
+                <th>{t('datasets.detail.overview.colMetric')}</th>
+                <th>{t('datasets.detail.overview.colValue')}</th>
+                <th>{t('datasets.detail.overview.colSplit')}</th>
+                <th>{t('datasets.detail.overview.colSource')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overview.benchmarks.map((b, i) => (
+                <tr key={i}>
+                  <td>{b.name}</td>
+                  <td>{b.metric}</td>
+                  <td>{b.value}</td>
+                  <td>{b.split || ''}</td>
+                  <td>{b.source || ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
+      {overview.regulatory_status || overview.regulatory_note ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>
+            {t('datasets.detail.overview.regulatoryTitle')}
+          </h3>
+          <p className='ml-overview-para'>
+            {[overview.regulatory_status, overview.regulatory_note]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </section>
+      ) : null}
+
+      {overview.disclaimer ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>
+            {t('datasets.detail.overview.disclaimerTitle')}
+          </h3>
+          <p className='ml-overview-para'>{overview.disclaimer}</p>
+        </section>
+      ) : null}
+
+      {overview.links && Object.keys(overview.links).length ? (
+        <section className='ml-overview-sec'>
+          <h3 className='ml-sub-h'>{t('datasets.detail.overview.linksTitle')}</h3>
+          <ul className='ml-overview-links'>
+            {Object.entries(overview.links).map(([k, v]) => (
+              <li key={k}>
+                <a
+                  className='ml-overview-link'
+                  href={v}
+                  target='_blank'
+                  rel='noreferrer'
+                >
+                  {k}
+                  <span className='ml-overview-link-arrow' aria-hidden='true'>
+                    ↗
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
+export function DatasetOverviewPanel({ detail }: DatasetOverviewPanelProps) {
+  const { t } = useTranslation()
 
   return (
     <section
@@ -63,30 +178,24 @@ export function DatasetOverviewPanel({ detail }: DatasetOverviewPanelProps) {
         </div>
         <div>
           <span className='ml-b-label'>{t('datasets.fields.sourceRepo')}</span>
-          <p>{detail.source_repo || t('datasets.fields.notAnnotated')}</p>
+          {/^https?:\/\//i.test(detail.source_repo) ? (
+            <p>
+              <a
+                href={detail.source_repo}
+                target='_blank'
+                rel='noreferrer'
+                className='ml-inline-link'
+              >
+                {detail.source_repo}
+              </a>
+            </p>
+          ) : (
+            <p>{detail.source_repo || t('datasets.fields.notAnnotated')}</p>
+          )}
         </div>
       </div>
 
-      {latest ? (
-        <>
-          <h3 className='ml-sub-h'>
-            {t('datasets.detail.specTitle', {
-              version: detail.latest_version || latest.ref,
-            })}
-          </h3>
-          <dl className='ml-spec-list'>
-            {specs.map(([label, value]) => (
-              <div className='ml-spec-row' key={label}>
-                <span>{label}</span>
-                <b>{value}</b>
-              </div>
-            ))}
-          </dl>
-        </>
-      ) : null}
-
-      <h3 className='ml-sub-h'>{t('datasets.detail.descriptionTitle')}</h3>
-      <p className='ml-readme'>{detail.description || t('datasets.fields.notAnnotated')}</p>
+      {detail.overview ? <LongFormDatasetOverview overview={detail.overview} /> : null}
     </section>
   )
 }

@@ -18,6 +18,19 @@
   --ml-accent-strong: color-mix(in oklch, var(--primary) 82%, var(--foreground));
   --ml-accent-hover: color-mix(in oklch, var(--primary) 70%, var(--foreground));
   --ml-accent-soft: color-mix(in oklch, var(--primary) 12%, transparent);
+  --ml-accent-ink: color-mix(in oklch, var(--primary) 78%, var(--foreground));
+  --ml-success: var(--success);
+  --ml-success-soft: color-mix(in oklch, var(--success) 16%, transparent);
+  --ml-success-ink: color-mix(in oklch, var(--success) 80%, var(--foreground));
+  --ml-teal: oklch(0.62 0.13 190);
+  --ml-teal-soft: color-mix(in oklch, oklch(0.62 0.13 190) 16%, transparent);
+  --ml-teal-ink: color-mix(in oklch, oklch(0.62 0.13 190) 80%, var(--foreground));
+  --ml-warn: var(--warning);
+  --ml-warn-soft: color-mix(in oklch, var(--warning) 18%, transparent);
+  --ml-warn-ink: color-mix(in oklch, var(--warning) 74%, var(--foreground));
+  --ml-danger: var(--destructive);
+  --ml-danger-soft: color-mix(in oklch, var(--destructive) 14%, transparent);
+  --ml-danger-ink: color-mix(in oklch, var(--destructive) 82%, var(--foreground));
   --ml-fg-soft: color-mix(in oklch, var(--foreground) 5%, transparent);
   --ml-panel-muted: color-mix(in oklab, var(--background) 64%, var(--foreground));
   --ml-panel-line: color-mix(in oklab, var(--background) 17%, var(--foreground));
@@ -237,12 +250,23 @@
   white-space: nowrap;
 }
 
+.ml-tag {
+  border-color: color-mix(in oklch, var(--ml-accent) 24%, var(--ml-border));
+  background: var(--ml-accent-soft);
+  color: var(--ml-accent-ink);
+  font-weight: 500;
+}
+
 .ml-task-chip {
   height: 21px;
   flex: none;
   font-family: var(--ml-mono);
   font-size: 10.5px;
   letter-spacing: 0.03em;
+  border-color: color-mix(in oklch, var(--ml-teal) 28%, var(--ml-border));
+  background: var(--ml-teal-soft);
+  color: var(--ml-teal-ink);
+  font-weight: 600;
 }
 
 .ml-usage-badge {
@@ -265,11 +289,53 @@
 
 .ml-usage-badge.is-gated {
   border-style: dashed;
+  border-color: color-mix(in oklch, var(--ml-warn) 42%, var(--ml-border));
+  background: var(--ml-warn-soft);
+  color: var(--ml-warn-ink);
 }
 
 .ml-usage-badge.is-gated::before {
-  background: transparent;
-  border: 1px solid var(--ml-muted);
+  background: var(--ml-warn);
+  border: 0;
+}
+
+/* Evidence level badge: colors follow the evidence hash / grading scale
+   (lowest = red, middle = amber, higher = green / teal). */
+.ml-evidence-tag {
+  flex: none;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--ml-radius);
+  border: 1px solid transparent;
+  font-family: var(--ml-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 20px;
+}
+
+.ml-evidence-tag[data-level^='L0'] {
+  background: var(--ml-danger-soft);
+  border-color: color-mix(in oklch, var(--ml-danger) 30%, var(--ml-border));
+  color: var(--ml-danger-ink);
+}
+
+.ml-evidence-tag[data-level^='L1'] {
+  background: var(--ml-warn-soft);
+  border-color: color-mix(in oklch, var(--ml-warn) 34%, var(--ml-border));
+  color: var(--ml-warn-ink);
+}
+
+.ml-evidence-tag[data-level^='L2'] {
+  background: var(--ml-success-soft);
+  border-color: color-mix(in oklch, var(--ml-success) 30%, var(--ml-border));
+  color: var(--ml-success-ink);
+}
+
+.ml-evidence-tag[data-level^='L3'] {
+  background: var(--ml-teal-soft);
+  border-color: color-mix(in oklch, var(--ml-teal) 32%, var(--ml-border));
+  color: var(--ml-teal-ink);
 }
 
 .ml-status-pill {
@@ -532,13 +598,15 @@
 }
 
 .ml-scope .ml-filter-opt.is-active {
-  color: var(--ml-fg);
-  font-weight: 500;
+  color: var(--ml-accent-ink);
+  font-weight: 600;
+  background: var(--ml-accent-soft);
+  padding-left: 4px;
 }
 
 .ml-scope .ml-filter-opt.is-active::before {
-  background: var(--ml-fg);
-  border-color: var(--ml-fg);
+  background: var(--ml-accent);
+  border-color: var(--ml-accent);
 }
 
 .ml-scope .ml-filter-reset {
@@ -740,9 +808,9 @@
 }
 
 .ml-scope .ml-model-card:hover {
-  border-color: color-mix(in oklab, var(--ml-border) 42%, var(--ml-fg));
+  border-color: color-mix(in oklch, var(--ml-accent) 45%, var(--ml-border));
   transform: translateY(-1px);
-  box-shadow: 0 5px 16px color-mix(in oklab, var(--ml-fg) 7%, transparent);
+  box-shadow: 0 6px 18px color-mix(in oklch, var(--ml-accent) 14%, transparent);
 }
 
 .ml-scope .ml-model-card:focus-visible {
@@ -762,13 +830,13 @@
   flex: none;
   display: grid;
   place-items: center;
-  border: 1px solid var(--ml-border);
+  border: 1px solid color-mix(in oklch, var(--ml-accent) 30%, var(--ml-border));
   border-radius: var(--ml-radius);
-  background: var(--ml-bg);
+  background: var(--ml-accent-soft);
   font-family: var(--ml-mono);
   font-size: 10.5px;
   font-weight: 600;
-  color: var(--ml-fg);
+  color: var(--ml-accent-ink);
 }
 
 .ml-model-id {
@@ -808,6 +876,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+  padding-bottom: 5px;
 }
 
 .ml-model-foot {
@@ -1186,6 +1255,16 @@
   line-height: 1.6;
   color: var(--ml-fg);
   overflow-wrap: anywhere;
+}
+
+.ml-inline-link {
+  word-break: break-all;
+  color: var(--ml-accent);
+  text-decoration: none;
+}
+
+.ml-inline-link:hover {
+  text-decoration: underline;
 }
 
 .ml-spec-list {
@@ -1736,4 +1815,72 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ---- model overview long-form (overview tab) ---- */
+.ml-overview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 18px;
+}
+.ml-overview-sec .ml-sub-h {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+.ml-overview-para {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.ml-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.ml-overview-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.ml-overview-links {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.ml-overview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ml-accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklch, var(--ml-accent) 45%, transparent);
+  padding-bottom: 1px;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.ml-overview-link:hover {
+  color: var(--ml-accent-strong);
+  border-color: currentColor;
+}
+.ml-overview-link-arrow {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.ml-bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.ml-bench-table th,
+.ml-bench-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ml-border, #e5e7eb);
+}
+.ml-bench-table th {
+  font-weight: 600;
 }

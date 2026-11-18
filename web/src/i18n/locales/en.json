@@ -185,10 +185,15 @@
       "reset": "Reset all filters",
       "all": "All",
       "groups": {
+        "department": "Department",
+        "modality": "Modality",
         "task": "Task",
+        "evidence": "Evidence",
+        "publisher": "Publisher",
+        "license": "License",
+        "distribution": "Distribution",
         "arch": "Architecture",
         "quant": "Quantization",
-        "license": "License",
         "usage": "Usage boundary"
       }
     },
@@ -241,11 +246,32 @@
       "sideInfo": "Model information",
       "sideTags": "Tags, license & boundary",
       "runtimeTitle": "Compatible runtime profiles",
-      "versionsTitle": "Version history"
+      "versionsTitle": "Version history",
+      "overview": {
+        "descriptionTitle": "Description",
+        "intendedUseTitle": "Intended Use",
+        "limitationsTitle": "Limitations",
+        "contraindicationsTitle": "Contraindications",
+        "outOfScopeTitle": "Out of scope",
+        "benchmarksTitle": "Benchmarks",
+        "regulatoryTitle": "Regulatory",
+        "disclaimerTitle": "Disclaimer",
+        "linksTitle": "Links",
+        "none": "None",
+        "colDataset": "Dataset",
+        "colMetric": "Metric",
+        "colValue": "Value",
+        "colSplit": "Split",
+        "colSource": "Source"
+      }
     },
     "fields": {
       "task": "Task",
+      "department": "Department",
+      "modality": "Modality",
+      "evidence": "Evidence",
       "license": "License",
+      "distribution": "Distribution",
       "usage": "Usage boundary",
       "architecture": "Architecture",
       "quantization": "Quantization",
@@ -398,7 +424,23 @@
       "versionsTitle": "Version history",
       "descriptionTitle": "Description",
       "sideInfo": "Dataset information",
-      "sideTags": "Tags, license & boundary"
+      "sideTags": "Tags, license & boundary",
+      "overview": {
+        "descriptionTitle": "Description",
+        "intendedUseTitle": "Intended use",
+        "limitationsTitle": "Limitations",
+        "contraindicationsTitle": "Contraindications",
+        "outOfScopeTitle": "Out of scope",
+        "benchmarksTitle": "Benchmarks",
+        "regulatoryTitle": "Regulatory status",
+        "disclaimerTitle": "Disclaimer",
+        "linksTitle": "Links",
+        "colDataset": "Dataset / benchmark",
+        "colMetric": "Metric",
+        "colValue": "Value",
+        "colSplit": "Split",
+        "colSource": "Source"
+      }
     },
     "fields": {
       "datasetName": "Dataset",

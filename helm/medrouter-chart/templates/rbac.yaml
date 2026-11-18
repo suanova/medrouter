@@ -32,6 +32,44 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "medrouter.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
+
+{{- if and .Values.modelLibrary.rbac.create .Values.modelLibrary.rbac.overview.create }}
+---
+# Model overview ConfigMaps are namespaced (unlike the CubeStack CRDs) and live
+# in modelLibrary.overviewNamespace. A namespaced Role scoped to that namespace
+# is the least privilege that lets the overview tab read the overview.yaml body.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ printf "%s-%s-overview" (include "medrouter.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Values.modelLibrary.overviewNamespace }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    medrouter.io/catalog: models
+    medrouter.io/component: overview
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ printf "%s-%s-overview" (include "medrouter.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Values.modelLibrary.overviewNamespace }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    medrouter.io/catalog: models
+    medrouter.io/component: overview
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ printf "%s-%s-overview" (include "medrouter.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "medrouter.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
 {{- end }}
 {{- if and .Values.datasetLibrary.enabled .Values.datasetLibrary.rbac.create }}
 ---

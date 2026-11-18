@@ -193,3 +193,105 @@ func TestDatasetVersionNaturalOrder(t *testing.T) {
 		t.Fatalf("order = %#v", detail.Versions)
 	}
 }
+
+func TestDatasetGovernanceReadsAiCubestackAnnotations(t *testing.T) {
+	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	ann := map[string]string{
+		annotationAcquisitionMethod: "公开发布（HuggingFace 镜像 / 作者仓库）",
+		annotationDeIdentification:  "不适用——不含患者个人信息",
+		annotationEthicsBasis:       "无需 IRB；来源为公开医学考试题",
+		annotationSourceRepository:  "https://huggingface.co/datasets/medmcqa/medmcqa",
+	}
+	ds := testDataset("medmcqa-v1", "medmcqa", "v1.0", "JSONL", base, ann)
+	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
+	got := list.Datasets[0]
+	if got.Access != ann[annotationAcquisitionMethod] {
+		t.Fatalf("access = %q", got.Access)
+	}
+	if got.Deidentification != ann[annotationDeIdentification] {
+		t.Fatalf("deidentification = %q", got.Deidentification)
+	}
+	if got.Ethics != ann[annotationEthicsBasis] {
+		t.Fatalf("ethics = %q", got.Ethics)
+	}
+	if got.SourceRepo != ann[annotationSourceRepository] {
+		t.Fatalf("source_repo = %q", got.SourceRepo)
+	}
+}
+
+func TestDatasetGovernancePrefersMedrouterKeys(t *testing.T) {
+	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	ann := map[string]string{
+		annotationAccess:           "public",
+		annotationAcquisitionMethod: "should be ignored",
+	}
+	ds := testDataset("d-v1", "d", "v1.0", "JSONL", base, ann)
+	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
+	if got := list.Datasets[0].Access; got != "public" {
+		t.Fatalf("access = %q", got)
+	}
+}
+
+func TestParseDatasetOverview(t *testing.T) {
+	body := `
+dataset: demo-dataset
+description: 一个用于指令微调的公开语料。
+intendedUse: 医疗问答辅助。
+limitations:
+  - 覆盖度有限
+benchmarks:
+  - name: Demo-Bench
+    metric: acc
+    value: "0.91"
+regulatoryStatus: 未注册
+`
+	ov, err := ParseDatasetOverview(body, "demo-dataset")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !ov.Valid {
+		t.Fatalf("expected valid")
+	}
+	if ov.Description == "" || len(ov.Limitations) != 1 {
+		t.Fatalf("unexpected parse: %+v", ov)
+	}
+}
+
+func TestParseDatasetOverviewRejectsAnchorMismatch(t *testing.T) {
+	body := "dataset: demo-a\ndescription: x\n"
+	_, err := ParseDatasetOverview(body, "demo-b")
+	if err == nil || !strings.Contains(err.Error(), "INVALID_DATASET_OVERVIEW") {
+		t.Fatalf("expected INVALID_DATASET_OVERVIEW, got %v", err)
+	}
+}
+
+func TestBuildDatasetOverviewsMatchesBySpecDataset(t *testing.T) {
+	base := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	datasets := []kube.Dataset{
+		testDataset("d1-v1", "d1", "v1.0", "JSONL", base, nil),
+		testDataset("d2-v1", "d2", "v1.0", "JSONL", base, nil),
+	}
+
+	cms := []kube.OverviewConfigMap{
+		// matches d1 -> kept
+		{Metadata: kube.ObjectMeta{Name: "d1-overview"}, Data: map[string]string{
+			"overview.yaml": "dataset: d1\ndescription: 匹配\n",
+		}},
+		// anchor mismatch (d3 does not exist) -> dropped
+		{Metadata: kube.ObjectMeta{Name: "d3-overview"}, Data: map[string]string{
+			"overview.yaml": "dataset: d3\ndescription: 未知\n",
+		}},
+		// no overview.yaml data -> dropped
+		{Metadata: kube.ObjectMeta{Name: "d2-overview"}, Data: map[string]string{
+			"other": "x",
+		}},
+	}
+
+	m := buildDatasetOverviews(cms, datasets, nil)
+	if len(m) != 1 {
+		t.Fatalf("expected 1 kept overview, got %d", len(m))
+	}
+	if _, ok := m["d1"]; !ok {
+		t.Fatalf("expected overview for d1, got %v", m)
+	}
+}

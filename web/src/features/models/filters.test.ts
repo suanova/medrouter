@@ -19,7 +19,15 @@ export function model(overrides: Partial<ModelSummary> = {}): ModelSummary {
     architecture: 'qwen2',
     quantization: 'bf16',
     task: 'chat',
+    department: '',
+    modality: '',
+    evidence: '',
     license: 'Apache-2.0',
+    distribution: '',
+    departments: [],
+    modalities: [],
+    tasks: ['chat'],
+    distributions: [],
     tags: ['chat', 'qwen'],
     usage_boundary: '',
     storage_strategy: 'S3',
@@ -45,6 +53,7 @@ const models = [
     architecture: 'llama',
     quantization: 'w8a8',
     task: 'text',
+    tasks: ['text'],
     license: 'Llama-3',
     tags: ['llama'],
     compatible_profile_count: 0,
@@ -127,5 +136,31 @@ describe('facets', () => {
   it('counts active filters including search', () => {
     expect(activeFilterCount({})).toBe(0)
     expect(activeFilterCount({ q: 'x', task: 'chat', arch: '' })).toBe(2)
+  })
+
+  it('builds list facets from medicine annotations and filters by membership', () => {
+    const medical = model({
+      model: 'biomistral-7b',
+      display_name: 'BioMistral',
+      department: '心血管,呼吸',
+      departments: ['cardio', 'resp'],
+      modality: 'EMR文本',
+      modalities: ['EMR'],
+      task: '分类',
+      tasks: ['chat', 'vqa'],
+      evidence: 'L2',
+      license: 'Apache-2.0',
+      distribution: '下载，API',
+      distributions: ['download', 'api'],
+    })
+    const generic = model()
+    const set = [medical, generic]
+    expect(buildFacets(set).department).toContainEqual({ value: 'cardio', count: 1 })
+    expect(buildFacets(set).modality).toContainEqual({ value: 'EMR', count: 1 })
+    expect(buildFacets(set).evidence).toContainEqual({ value: 'L2', count: 1 })
+    expect(buildFacets(set).distribution).toContainEqual({ value: 'download', count: 1 })
+    expect(filterModels(set, { department: 'cardio' })).toEqual([medical])
+    expect(filterModels(set, { task: 'chat' })).toHaveLength(2)
+    expect(filterModels(set, { task: 'vqa' })).toEqual([medical])
   })
 })

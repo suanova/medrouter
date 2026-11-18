@@ -31,7 +31,15 @@ export interface ModelSummary {
   architecture: string
   quantization: string
   task: string
+  department: string
+  modality: string
+  evidence: string
   license: string
+  distribution: string
+  departments: string[]
+  modalities: string[]
+  tasks: string[]
+  distributions: string[]
   tags: string[]
   usage_boundary: string
   storage_strategy: string
@@ -112,9 +120,33 @@ export interface ModelVersionDetail {
   created_at: string
 }
 
+export interface ModelOverviewBenchmark {
+  name: string
+  metric: string
+  value: string
+  split?: string
+  source?: string
+}
+
+export interface ModelOverview {
+  model: string
+  description?: string
+  intended_use?: string
+  limitations?: string[]
+  contraindications?: string[]
+  out_of_scope?: string[]
+  benchmarks?: ModelOverviewBenchmark[]
+  regulatory_status?: string
+  regulatory_note?: string
+  disclaimer?: string
+  links?: Record<string, string>
+  extra?: Record<string, unknown>
+}
+
 export interface ModelDetail extends CatalogStatus, ModelSummary {
   latest_ref: string
   versions: ModelVersionDetail[]
   compatible_profiles: RuntimeProfileSummary[]
   used_by: UsedByRef[]
+  overview?: ModelOverview | null
 }

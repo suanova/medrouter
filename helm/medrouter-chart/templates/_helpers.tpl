@@ -267,6 +267,12 @@ ConfigMap, which is always rendered.
 {{- fail "modelLibrary.rbac.create=true requires a service account; set serviceAccount.create=true or serviceAccount.name" -}}
 {{- end -}}
 {{- end -}}
+{{- if and .Values.modelLibrary.enabled .Values.modelLibrary.rbac.overview.create -}}
+{{- $ns := trim (toString .Values.modelLibrary.overviewNamespace) -}}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $ns) -}}
+{{- fail (printf "modelLibrary.overviewNamespace must be a valid Kubernetes namespace name, got %q" (toString .Values.modelLibrary.overviewNamespace)) -}}
+{{- end -}}
+{{- end -}}
 {{- if lt (int (default 0 .Values.modelLibrary.cacheTTLSeconds)) 1 -}}
 {{- fail "modelLibrary.cacheTTLSeconds must be at least 1" -}}
 {{- end -}}
@@ -330,7 +336,7 @@ ConfigMap, which is always rendered.
 {{- end -}}
 {{- end -}}
 
-{{- $reserved := list "APP_ENV" "PORT" "BASE_PATH" "PUBLIC_ORIGIN" "SYSTEM_NAME" "REGISTER_ENABLED" "EMAIL_VERIFICATION_ENABLED" "EMAIL_DEBUG_MODE" "ALLOW_EMAIL_DEBUG_IN_PRODUCTION" "SESSION_COOKIE_SECURE" "SESSION_TTL_DAYS" "SESSION_TOUCH_INTERVAL_SECONDS" "TRUSTED_PROXIES" "SMTP_HOST" "SMTP_PORT" "SMTP_TLS_MODE" "SMTP_FROM" "SMTP_USERNAME" "GITHUB_CLIENT_ID" "GOOGLE_CLIENT_ID" "OIDC_ISSUER_URL" "OIDC_CLIENT_ID" "OIDC_DISPLAY_NAME" "OIDC_SCOPES" "INITIAL_ADMIN_USERNAME" "INITIAL_ADMIN_EMAIL" "SQLITE_PATH" "SQL_DSN" "SESSION_SECRET" "MODEL_LIBRARY_ENABLED" "MODEL_LIBRARY_CACHE_TTL_SECONDS" "MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS" "DATASET_LIBRARY_ENABLED" "DATASET_LIBRARY_CACHE_TTL_SECONDS" "DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS" -}}
+{{- $reserved := list "APP_ENV" "PORT" "BASE_PATH" "PUBLIC_ORIGIN" "SYSTEM_NAME" "REGISTER_ENABLED" "EMAIL_VERIFICATION_ENABLED" "EMAIL_DEBUG_MODE" "ALLOW_EMAIL_DEBUG_IN_PRODUCTION" "SESSION_COOKIE_SECURE" "SESSION_TTL_DAYS" "SESSION_TOUCH_INTERVAL_SECONDS" "TRUSTED_PROXIES" "SMTP_HOST" "SMTP_PORT" "SMTP_TLS_MODE" "SMTP_FROM" "SMTP_USERNAME" "GITHUB_CLIENT_ID" "GOOGLE_CLIENT_ID" "OIDC_ISSUER_URL" "OIDC_CLIENT_ID" "OIDC_DISPLAY_NAME" "OIDC_SCOPES" "INITIAL_ADMIN_USERNAME" "INITIAL_ADMIN_EMAIL" "SQLITE_PATH" "SQL_DSN" "SESSION_SECRET" "MODEL_LIBRARY_ENABLED" "MODEL_LIBRARY_CACHE_TTL_SECONDS" "MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS" "MODEL_LIBRARY_OVERVIEW_NAMESPACE" "DATASET_LIBRARY_ENABLED" "DATASET_LIBRARY_CACHE_TTL_SECONDS" "DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS" -}}
 {{- range $key, $_ := (default (dict) .Values.config.extra) -}}
 {{- if has $key $reserved -}}
 {{- fail (printf "config.extra.%s conflicts with a key managed by the chart; set the top-level value instead" $key) -}}

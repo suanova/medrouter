@@ -326,3 +326,35 @@ func TestUnavailableListShape(t *testing.T) {
 		t.Fatalf("empty list = %#v", list)
 	}
 }
+
+func TestMedicineAnnotationsProjectToList(t *testing.T) {
+	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	ann := map[string]string{
+		annotationDepartments:  "心血管,呼吸,神经",
+		annotationModalities:   "心电图、CT",
+		annotationTasks:        "分类、检索、预后",
+		annotationEvidence:     "L2",
+		annotationDistribution: "下载，API",
+	}
+	mv := testModelVersion("med-v1", "biomistral-7b", "bf16", "mistral", "bf16", base, ann)
+	list := BuildCatalogList([]kube.ModelVersion{mv}, nil, nil, base.Add(time.Hour))
+	m := list.Models[0]
+	if got := m.Departments; len(got) != 3 || got[0] != "心血管" || got[1] != "呼吸" || got[2] != "神经" {
+		t.Fatalf("departments = %#v", got)
+	}
+	if got := m.Modalities; len(got) != 2 || got[0] != "心电图" || got[1] != "CT" {
+		t.Fatalf("modalities = %#v", got)
+	}
+	if got := m.Tasks; len(got) != 3 || got[0] != "分类" || got[1] != "检索" || got[2] != "预后" {
+		t.Fatalf("tasks = %#v", got)
+	}
+	if m.Evidence != "L2" {
+		t.Fatalf("evidence = %q", m.Evidence)
+	}
+	if m.Distribution != "下载，API" {
+		t.Fatalf("distribution = %q", m.Distribution)
+	}
+	if got := m.Distributions; len(got) != 2 || got[0] != "下载" || got[1] != "API" {
+		t.Fatalf("distributions = %#v", got)
+	}
+}

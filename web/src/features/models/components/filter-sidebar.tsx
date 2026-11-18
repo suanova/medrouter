@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { FacetKey, FacetValue, Facets } from '../filters'
 import type { ModelFilterState } from '../filters'
+import { FACET_KEYS } from '../filters'
 
 interface FilterSidebarProps {
   facets: Facets
@@ -12,7 +13,7 @@ interface FilterSidebarProps {
   onClose: () => void
 }
 
-const GROUPS: FacetKey[] = ['task', 'arch', 'quant', 'license', 'usage']
+const GROUPS: FacetKey[] = [...FACET_KEYS]
 
 export function FilterSidebar({
   facets,

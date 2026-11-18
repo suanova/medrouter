@@ -78,6 +78,9 @@ type Config struct {
 	ModelLibraryAPIURL   string
 	ModelLibraryCacheTTL time.Duration
 	ModelLibraryTimeout  time.Duration
+	// ModelLibraryOverviewNamespace is where model overview ConfigMaps live
+	// (default cubestack-system). It is read-only data for the overview tab.
+	ModelLibraryOverviewNamespace string
 
 	DatasetLibraryEnabled  bool
 	DatasetLibraryAPIURL   string
@@ -149,10 +152,11 @@ func Load() (*Config, error) {
 		LoginRatePerMinute:  intEnv("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
 		RegisterRatePerHour: intEnv("REGISTER_RATE_LIMIT_PER_HOUR", 5),
 
-		ModelLibraryEnabled:  boolEnv("MODEL_LIBRARY_ENABLED", true),
-		ModelLibraryAPIURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("MODEL_LIBRARY_API_URL")), "/"),
-		ModelLibraryCacheTTL: secondsEnv("MODEL_LIBRARY_CACHE_TTL_SECONDS", 30),
-		ModelLibraryTimeout:  secondsEnv("MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS", 5),
+		ModelLibraryEnabled:           boolEnv("MODEL_LIBRARY_ENABLED", true),
+		ModelLibraryAPIURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("MODEL_LIBRARY_API_URL")), "/"),
+		ModelLibraryCacheTTL:          secondsEnv("MODEL_LIBRARY_CACHE_TTL_SECONDS", 30),
+		ModelLibraryOverviewNamespace: overviewNamespace(os.Getenv("MODEL_LIBRARY_OVERVIEW_NAMESPACE")),
+		ModelLibraryTimeout:           secondsEnv("MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS", 5),
 
 		DatasetLibraryEnabled:  boolEnv("DATASET_LIBRARY_ENABLED", true),
 		DatasetLibraryAPIURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("DATASET_LIBRARY_API_URL")), "/"),
@@ -259,4 +263,14 @@ func secondsEnv(key string, fallback int) time.Duration {
 
 func daysEnv(key string, fallback int) time.Duration {
 	return time.Duration(intEnv(key, fallback)) * 24 * time.Hour
+}
+
+// overviewNamespace returns the namespace holding model overview ConfigMaps.
+// It defaults to cubestack-system; an empty value falls back to the default.
+func overviewNamespace(raw string) string {
+	v := strings.TrimSpace(strings.TrimRight(raw, "/"))
+	if v == "" {
+		return "cubestack-system"
+	}
+	return v
 }
