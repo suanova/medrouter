@@ -197,14 +197,22 @@ func TestDatasetVersionNaturalOrder(t *testing.T) {
 func TestDatasetGovernanceReadsAiCubestackAnnotations(t *testing.T) {
 	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
 	ann := map[string]string{
-		annotationAcquisitionMethod: "公开发布（HuggingFace 镜像 / 作者仓库）",
-		annotationDeIdentification:  "不适用——不含患者个人信息",
-		annotationEthicsBasis:       "无需 IRB；来源为公开医学考试题",
-		annotationSourceRepository:  "https://huggingface.co/datasets/medmcqa/medmcqa",
+		annotationAcquisitionMethod:  "公开发布（HuggingFace 镜像 / 作者仓库）",
+		annotationDeIdentification:   "不适用——不含患者个人信息",
+		annotationEthicsBasis:        "无需 IRB；来源为公开医学考试题",
+		annotationSourceRepository:   "https://huggingface.co/datasets/medmcqa/medmcqa",
+		annotationCubestackPublisher: "MedMCQA（源于印度医学考试 AIIMS / NEET-PG）",
+		annotationCubestackLicense:   "Apache-2.0",
 	}
 	ds := testDataset("medmcqa-v1", "medmcqa", "v1.0", "JSONL", base, ann)
 	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
 	got := list.Datasets[0]
+	if got.Publisher != ann[annotationCubestackPublisher] {
+		t.Fatalf("publisher = %q", got.Publisher)
+	}
+	if got.License != ann[annotationCubestackLicense] {
+		t.Fatalf("license = %q", got.License)
+	}
 	if got.Access != ann[annotationAcquisitionMethod] {
 		t.Fatalf("access = %q", got.Access)
 	}
@@ -222,13 +230,34 @@ func TestDatasetGovernanceReadsAiCubestackAnnotations(t *testing.T) {
 func TestDatasetGovernancePrefersMedrouterKeys(t *testing.T) {
 	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
 	ann := map[string]string{
-		annotationAccess:           "public",
-		annotationAcquisitionMethod: "should be ignored",
+		annotationAccess:             "public",
+		annotationAcquisitionMethod:  "should be ignored",
+		annotationPublisher:          "Explicit Publisher",
+		annotationCubestackPublisher: "Fallback Publisher",
+		annotationLicense:            "MIT",
+		annotationCubestackLicense:   "Apache-2.0",
 	}
 	ds := testDataset("d-v1", "d", "v1.0", "JSONL", base, ann)
+	ds.Spec.Meta = map[string]string{"license": "CC0-1.0"}
 	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
 	if got := list.Datasets[0].Access; got != "public" {
 		t.Fatalf("access = %q", got)
+	}
+	if got := list.Datasets[0].Publisher; got != "Explicit Publisher" {
+		t.Fatalf("publisher = %q", got)
+	}
+	if got := list.Datasets[0].License; got != "MIT" {
+		t.Fatalf("license = %q", got)
+	}
+}
+
+func TestDatasetLicenseFallsBackToSpecMeta(t *testing.T) {
+	base := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	ds := testDataset("d-v1", "d", "v1.0", "JSONL", base, nil)
+	ds.Spec.Meta = map[string]string{"license": "  CC-BY-SA-4.0\n"}
+	list := BuildDatasetList([]kube.Dataset{ds}, base.Add(time.Hour))
+	if got := list.Datasets[0].License; got != "CC-BY-SA-4.0" {
+		t.Fatalf("license = %q", got)
 	}
 }
 
