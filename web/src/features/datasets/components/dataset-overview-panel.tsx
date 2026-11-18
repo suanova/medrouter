@@ -121,8 +121,16 @@ function LongFormDatasetOverview({ overview }: { overview: DatasetOverview }) {
           <ul className='ml-overview-links'>
             {Object.entries(overview.links).map(([k, v]) => (
               <li key={k}>
-                <a href={v} target='_blank' rel='noreferrer'>
+                <a
+                  className='ml-overview-link'
+                  href={v}
+                  target='_blank'
+                  rel='noreferrer'
+                >
                   {k}
+                  <span className='ml-overview-link-arrow' aria-hidden='true'>
+                    ↗
+                  </span>
                 </a>
               </li>
             ))}
