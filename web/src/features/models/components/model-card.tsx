@@ -42,6 +42,11 @@ export function ModelCard({ model }: ModelCardProps) {
       <p className='ml-model-desc'>{modelDescription(model, t)}</p>
 
       <div className='ml-model-tags'>
+        {model.evidence ? (
+          <span className='ml-evidence-tag' data-level={model.evidence}>
+            {model.evidence}
+          </span>
+        ) : null}
         {model.usage_boundary ? (
           <span
             className={

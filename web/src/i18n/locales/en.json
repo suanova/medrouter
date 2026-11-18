@@ -246,7 +246,24 @@
       "sideInfo": "Model information",
       "sideTags": "Tags, license & boundary",
       "runtimeTitle": "Compatible runtime profiles",
-      "versionsTitle": "Version history"
+      "versionsTitle": "Version history",
+      "overview": {
+        "descriptionTitle": "Description",
+        "intendedUseTitle": "Intended Use",
+        "limitationsTitle": "Limitations",
+        "contraindicationsTitle": "Contraindications",
+        "outOfScopeTitle": "Out of scope",
+        "benchmarksTitle": "Benchmarks",
+        "regulatoryTitle": "Regulatory",
+        "disclaimerTitle": "Disclaimer",
+        "linksTitle": "Links",
+        "none": "None",
+        "colDataset": "Dataset",
+        "colMetric": "Metric",
+        "colValue": "Value",
+        "colSplit": "Split",
+        "colSource": "Source"
+      }
     },
     "fields": {
       "task": "Task",

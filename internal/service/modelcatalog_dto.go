@@ -137,4 +137,9 @@ type ModelDetail struct {
 	Versions           []ModelVersionDetail    `json:"versions"`
 	CompatibleProfiles []RuntimeProfileSummary `json:"compatible_profiles"`
 	UsedBy             []UsedByRef             `json:"used_by"`
+	// Overview is the long-form model overview read from a ConfigMap, when one
+	// exists and passes model-anchor validation. It is optional: missing or
+	// invalid overviews leave this nil and the overview tab shows core fields
+	// only. Identity and filter facets are not duplicated here.
+	Overview *ModelOverview `json:"overview,omitempty"`
 }

@@ -246,7 +246,24 @@
       "sideInfo": "模型信息",
       "sideTags": "标签、许可与边界",
       "runtimeTitle": "兼容的运行时配置",
-      "versionsTitle": "版本历史"
+      "versionsTitle": "版本历史",
+      "overview": {
+        "descriptionTitle": "模型介绍",
+        "intendedUseTitle": "预期用途",
+        "limitationsTitle": "局限",
+        "contraindicationsTitle": "禁忌/不适用",
+        "outOfScopeTitle": "超出范围",
+        "benchmarksTitle": "评测基准",
+        "regulatoryTitle": "资质与合规",
+        "disclaimerTitle": "免责声明",
+        "linksTitle": "链接",
+        "none": "暂无",
+        "colDataset": "数据集",
+        "colMetric": "指标",
+        "colValue": "数值",
+        "colSplit": "划分",
+        "colSource": "来源"
+      }
     },
     "fields": {
       "task": "任务类型",

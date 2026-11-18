@@ -33,9 +33,10 @@
 }
 
 .ml-scope .ds-chip[aria-pressed='true'] {
-  background: var(--ml-fg);
-  border-color: var(--ml-fg);
-  color: var(--ml-bg);
+  background: var(--ml-accent-soft);
+  border-color: color-mix(in oklch, var(--ml-accent) 45%, var(--ml-border));
+  color: var(--ml-accent-ink);
+  font-weight: 600;
 }
 
 .ml-scope .ds-toolbar {
