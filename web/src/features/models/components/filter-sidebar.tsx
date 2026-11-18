@@ -1,14 +1,14 @@
 import { useTranslation } from 'react-i18next'
 
-import type { FacetKey, FacetValue, Facets } from '../filters'
-import type { ModelFilterState } from '../filters'
-import { FACET_KEYS } from '../filters'
+import type { FacetKey, FacetValue, Facets, ModelFilterState } from '../filters'
+import { FACET_KEYS, selectedValues } from '../filters'
 
 interface FilterSidebarProps {
   facets: Facets
   filters: ModelFilterState
   open: boolean
-  onChange: (key: FacetKey, value: string | undefined) => void
+  onToggle: (key: FacetKey, value: string) => void
+  onClear: (key: FacetKey) => void
   onReset: () => void
   onClose: () => void
 }
@@ -19,7 +19,8 @@ export function FilterSidebar({
   facets,
   filters,
   open,
-  onChange,
+  onToggle,
+  onClear,
   onReset,
   onClose,
 }: FilterSidebarProps) {
@@ -37,11 +38,17 @@ export function FilterSidebar({
         </button>
       </div>
 
+      <p className='ml-filter-hint'>{t('models.filters.hint')}</p>
+
       {GROUPS.map((key) => {
         const options: FacetValue[] = [...facets[key]]
-        const selected = filters[key]
-        if (selected && !options.some((option) => option.value === selected)) {
-          options.push({ value: selected, count: 0 })
+        const selected = selectedValues(filters[key])
+        // Keep a shared-link value visible even when the current catalog no
+        // longer has it; its count is 0 and it can still be removed.
+        for (const value of selected) {
+          if (!options.some((option) => option.value === value)) {
+            options.push({ value, count: 0 })
+          }
         }
         if (options.length === 0) return null
         return (
@@ -50,27 +57,27 @@ export function FilterSidebar({
             <div role='group' aria-label={t(`models.filters.groups.${key}`)}>
               <button
                 type='button'
-                className={selected ? 'ml-filter-opt' : 'ml-filter-opt is-active'}
-                aria-pressed={!selected}
-                onClick={() => onChange(key, undefined)}
+                className={selected.length === 0 ? 'ml-filter-opt is-active' : 'ml-filter-opt'}
+                aria-pressed={selected.length === 0}
+                onClick={() => onClear(key)}
               >
                 {t('models.filters.all')}
               </button>
-              {options.map((option) => (
-                <button
-                  key={option.value}
-                  type='button'
-                  className={
-                    selected === option.value
-                      ? 'ml-filter-opt is-active'
-                      : 'ml-filter-opt'
-                  }
-                  aria-pressed={selected === option.value}
-                  onClick={() => onChange(key, option.value)}
-                >
-                  {option.value}
-                </button>
-              ))}
+              {options.map((option) => {
+                const active = selected.includes(option.value)
+                return (
+                  <button
+                    key={option.value}
+                    type='button'
+                    className={active ? 'ml-filter-opt is-active' : 'ml-filter-opt'}
+                    aria-pressed={active}
+                    onClick={() => onToggle(key, option.value)}
+                  >
+                    {option.value}
+                    <span className='ml-filter-count'>{option.count}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )

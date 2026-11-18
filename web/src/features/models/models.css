@@ -569,6 +569,23 @@
   color: var(--ml-muted);
 }
 
+.ml-filter-hint {
+  margin: -4px 0 14px;
+  font-size: 12px;
+  color: var(--ml-muted);
+}
+
+.ml-filter-count {
+  margin-left: auto;
+  font-family: var(--ml-mono);
+  font-size: 11px;
+  color: var(--ml-muted);
+}
+
+.ml-scope .ml-filter-opt.is-active .ml-filter-count {
+  color: var(--ml-accent-ink);
+}
+
 .ml-scope .ml-filter-opt {
   display: flex;
   align-items: center;

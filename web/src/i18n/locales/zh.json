@@ -184,17 +184,13 @@
       "close": "收起",
       "reset": "重置全部筛选",
       "all": "全部",
+      "hint": "可多选",
       "groups": {
         "department": "科室",
         "modality": "模态",
         "task": "任务类型",
-        "evidence": "证据",
-        "publisher": "发布者",
-        "license": "协议",
-        "distribution": "交付",
-        "arch": "架构",
-        "quant": "量化",
-        "usage": "使用边界"
+        "evidence": "证据等级",
+        "license": "协议"
       }
     },
     "sort": {

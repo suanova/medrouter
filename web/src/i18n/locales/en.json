@@ -184,17 +184,13 @@
       "close": "Close",
       "reset": "Reset all filters",
       "all": "All",
+      "hint": "Select multiple",
       "groups": {
         "department": "Department",
         "modality": "Modality",
         "task": "Task",
-        "evidence": "Evidence",
-        "publisher": "Publisher",
-        "license": "License",
-        "distribution": "Distribution",
-        "arch": "Architecture",
-        "quant": "Quantization",
-        "usage": "Usage boundary"
+        "evidence": "Evidence level",
+        "license": "License"
       }
     },
     "sort": {

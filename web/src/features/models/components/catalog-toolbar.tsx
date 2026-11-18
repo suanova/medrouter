@@ -2,7 +2,7 @@ import { ChevronDown, Search, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { FacetKey, ModelFilterState } from '../filters'
-import { FACET_KEYS } from '../filters'
+import { FACET_KEYS, selectedValues } from '../filters'
 import { MODEL_SORTS, type ModelSort } from '../search'
 
 interface CatalogToolbarProps {
@@ -13,7 +13,8 @@ interface CatalogToolbarProps {
   filtered: boolean
   activeCount: number
   filters: ModelFilterState
-  onClear: (key: 'q' | FacetKey) => void
+  onClearQuery: () => void
+  onClearFacet: (key: FacetKey, value: string) => void
   onReset: () => void
   sort: ModelSort
   onSortChange: (sort: ModelSort) => void
@@ -29,7 +30,8 @@ export function CatalogToolbar({
   filtered,
   activeCount,
   filters,
-  onClear,
+  onClearQuery,
+  onClearFacet,
   onReset,
   sort,
   onSortChange,
@@ -72,27 +74,25 @@ export function CatalogToolbar({
             <button
               type='button'
               className='ml-chip-clear'
-              onClick={() => onClear('q')}
+              onClick={onClearQuery}
               title={t('models.search.clear')}
             >
               {query} <i aria-hidden='true'>×</i>
             </button>
           ) : null}
-          {FACET_KEYS.map((key) => {
-            const value = filters[key]
-            if (!value) return null
-            return (
+          {FACET_KEYS.map((key) =>
+            selectedValues(filters[key]).map((value) => (
               <button
-                key={key}
+                key={`${key}:${value}`}
                 type='button'
                 className='ml-chip-clear'
-                onClick={() => onClear(key)}
+                onClick={() => onClearFacet(key, value)}
                 title={`${t(`models.filters.groups.${key}`)}: ${value}`}
               >
                 {value} <i aria-hidden='true'>×</i>
               </button>
-            )
-          })}
+            ))
+          )}
           {activeCount > 0 ? (
             <button type='button' className='ml-filter-reset' onClick={onReset}>
               {t('models.filters.reset')}
