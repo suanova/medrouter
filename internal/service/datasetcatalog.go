@@ -62,23 +62,28 @@ func (c *DatasetCatalog) List(ctx context.Context) *DatasetList {
 	return c.snapshot(ctx).list
 }
 
-// VersionStorage resolves one Dataset version for the file browser. It returns
-// the raw storage block (only inside the API process; it is never serialized),
-// whether the version exists, and the catalog status so the caller can tell a
-// missing dataset from an unavailable catalog.
+// ResolveVersionStorage resolves one Dataset version for the file browser. It
+// returns the raw storage block (only inside the API process; it is never
+// serialized), whether the version exists, and the catalog status so the caller
+// can tell a missing dataset from an unavailable catalog.
 //
 // versionRef may be a Dataset metadata.name, a spec.version, or empty for the
 // latest version of the group.
-func (c *DatasetCatalog) VersionStorage(ctx context.Context, name, versionRef string) (DatasetVersionStorage, bool, DatasetCatalogStatus) {
+func (c *DatasetCatalog) ResolveVersionStorage(ctx context.Context, name, versionRef string) (VersionStorage, bool, StorageStatus) {
 	snap := c.snapshot(ctx)
-	status := snap.list.DatasetCatalogStatus
+	status := StorageStatus{
+		Available: snap.list.Available,
+		Reason:    snap.list.Reason,
+		Message:   snap.list.Message,
+		Retryable: snap.list.Retryable,
+	}
 	if !snap.available {
-		return DatasetVersionStorage{}, false, status
+		return VersionStorage{}, false, status
 	}
 
 	group, ok := findDatasetGroup(groupDatasets(snap.datasets), name)
 	if !ok {
-		return DatasetVersionStorage{}, false, status
+		return VersionStorage{}, false, status
 	}
 
 	chosen := group.versions[0]
@@ -92,25 +97,16 @@ func (c *DatasetCatalog) VersionStorage(ctx context.Context, name, versionRef st
 			}
 		}
 		if !found {
-			return DatasetVersionStorage{}, false, status
+			return VersionStorage{}, false, status
 		}
 	}
 
-	return DatasetVersionStorage{
+	return VersionStorage{
 		Ref:      chosen.Metadata.Name,
 		Version:  chosen.Spec.Version,
 		Strategy: chosen.Spec.Storage.Strategy,
 		S3URI:    s3URI(chosen.Spec.Storage.S3),
 	}, true, status
-}
-
-// DatasetVersionStorage is the subset of a Dataset version the file browser
-// needs. S3URI stays server-side.
-type DatasetVersionStorage struct {
-	Ref      string
-	Version  string
-	Strategy string
-	S3URI    string
 }
 
 func s3URI(storage *kube.S3Storage) string {

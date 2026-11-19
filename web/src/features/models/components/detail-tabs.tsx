@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
-export type DetailTab = 'overview' | 'runtimes' | 'versions'
+export type DetailTab = 'overview' | 'runtimes' | 'versions' | 'files'
 
 interface DetailTabsProps {
   active: DetailTab
@@ -20,6 +20,7 @@ export function DetailTabs({
     { id: 'overview', label: t('models.detail.tabs.overview') },
     { id: 'runtimes', label: t('models.detail.tabs.runtimes'), count: runtimeCount },
     { id: 'versions', label: t('models.detail.tabs.versions'), count: versionCount },
+    { id: 'files', label: t('models.detail.tabs.files') },
   ]
 
   return (

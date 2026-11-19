@@ -46,14 +46,15 @@ func main() {
 	oauth := service.NewOAuthService(cfg, users, sessions)
 	catalog := service.NewModelCatalog(cfg, newCatalogSource(cfg))
 	datasetCatalog := service.NewDatasetCatalog(cfg, newDatasetSource(cfg))
-	datasetStore := newDatasetFilesStore(cfg)
-	datasetFiles := service.NewDatasetFilesService(cfg, datasetCatalog, datasetStore)
+	objectStore := newObjectStore(cfg)
+	modelFiles := service.NewFilesService(cfg, catalog, objectStore)
+	datasetFiles := service.NewFilesService(cfg, datasetCatalog, objectStore)
 
 	userController := controller.NewUserController(cfg, users, sessions)
 	verificationController := controller.NewVerificationController(verification)
 	oauthController := controller.NewOAuthController(cfg, oauth, sessions)
 	statusController := controller.NewStatusController(cfg, oauth)
-	modelController := controller.NewModelController(catalog)
+	modelController := controller.NewModelController(catalog, modelFiles)
 	datasetController := controller.NewDatasetController(datasetCatalog, datasetFiles)
 
 	engine := router.New(router.Deps{
@@ -97,14 +98,14 @@ func main() {
 	} else {
 		log.Printf("dataset library: disabled")
 	}
-	if datasetStore != nil {
+	if objectStore != nil {
 		if cfg.S3Endpoint != "" {
-			log.Printf("dataset files: object store at %s", cfg.S3Endpoint)
+			log.Printf("file browser: object store at %s", cfg.S3Endpoint)
 		} else {
-			log.Printf("dataset files: using the default AWS S3 endpoint (region %s)", cfg.S3Region)
+			log.Printf("file browser: using the default AWS S3 endpoint (region %s)", cfg.S3Region)
 		}
 	} else {
-		log.Printf("dataset files: browsing disabled")
+		log.Printf("file browser: browsing disabled")
 	}
 
 	server := &http.Server{
@@ -134,17 +135,18 @@ func main() {
 	}
 }
 
-// newDatasetFilesStore builds the S3-backed file browser store. It returns nil
-// (S3_DISABLED in the API) when the feature is off or misconfigured; a bad
-// configuration must never keep MedRouter from starting.
-func newDatasetFilesStore(cfg *config.Config) service.ObjectStore {
+// newObjectStore builds the S3-backed file browser store used by the dataset
+// and model libraries. It returns nil (S3_DISABLED in the API) when the feature
+// is off or misconfigured; a bad configuration must never keep MedRouter from
+// starting.
+func newObjectStore(cfg *config.Config) service.ObjectStore {
 	if !cfg.S3Enabled {
 		return nil
 	}
 	if cfg.S3Endpoint == "" {
 		// Empty means the standard AWS S3 endpoint for S3_REGION. This is the
 		// normal configuration on real AWS; custom stores set S3_ENDPOINT.
-		log.Printf("dataset files: no S3_ENDPOINT; using the default AWS endpoint (region %s)", cfg.S3Region)
+		log.Printf("file browser: no S3_ENDPOINT; using the default AWS endpoint (region %s)", cfg.S3Region)
 	}
 	credentials, err := cfg.LoadS3Credentials()
 	if err != nil {

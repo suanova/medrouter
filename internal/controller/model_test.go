@@ -29,7 +29,7 @@ func (emptySource) ListDatasets(context.Context) ([]kube.Dataset, error) {
 
 func modelRouter(source kube.Source) *gin.Engine {
 	cfg := &config.Config{ModelLibraryCacheTTL: time.Minute, ModelLibraryTimeout: time.Second}
-	controller := NewModelController(service.NewModelCatalog(cfg, source))
+	controller := NewModelController(service.NewModelCatalog(cfg, source), nil)
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/models", controller.List)

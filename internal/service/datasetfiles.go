@@ -34,8 +34,8 @@ const (
 	filesMaxLimit     = 1000
 )
 
-// DatasetFilesStatus is the availability envelope of the file listing.
-type DatasetFilesStatus struct {
+// FilesStatus is the availability envelope of the file listing.
+type FilesStatus struct {
 	Available   bool      `json:"available"`
 	Reason      string    `json:"reason,omitempty"`
 	Message     string    `json:"message,omitempty"`
@@ -43,10 +43,10 @@ type DatasetFilesStatus struct {
 	GeneratedAt time.Time `json:"generated_at"`
 }
 
-// DatasetFileEntry is one directory or file under the current prefix. Path is
+// FileEntry is one directory or file under the current prefix. Path is
 // relative to the dataset version root and never contains the bucket or the
 // full S3 key.
-type DatasetFileEntry struct {
+type FileEntry struct {
 	Name         string     `json:"name"`
 	Path         string     `json:"path"`
 	Type         string     `json:"type"`
@@ -54,22 +54,22 @@ type DatasetFileEntry struct {
 	LastModified *time.Time `json:"last_modified,omitempty"`
 }
 
-// DatasetFiles is the payload of GET /api/datasets/:name/files.
-type DatasetFiles struct {
-	DatasetFilesStatus
-	Ref        string             `json:"ref"`
-	Version    string             `json:"version"`
-	Storage    string             `json:"storage"`
-	Prefix     string             `json:"prefix"`
-	Parent     string             `json:"parent,omitempty"`
-	Entries    []DatasetFileEntry `json:"entries"`
-	Truncated  bool               `json:"truncated"`
-	NextCursor string             `json:"next_cursor,omitempty"`
+// FileListing is the payload of GET /api/datasets/:name/files.
+type FileListing struct {
+	FilesStatus
+	Ref        string      `json:"ref"`
+	Version    string      `json:"version"`
+	Storage    string      `json:"storage"`
+	Prefix     string      `json:"prefix"`
+	Parent     string      `json:"parent,omitempty"`
+	Entries    []FileEntry `json:"entries"`
+	Truncated  bool        `json:"truncated"`
+	NextCursor string      `json:"next_cursor,omitempty"`
 }
 
-// DatasetDownload is the payload of GET /api/datasets/:name/files/download.
+// FileDownload is the payload of GET /api/datasets/:name/files/download.
 // URL is a short-lived presigned GET; it is only set when Available is true.
-type DatasetDownload struct {
+type FileDownload struct {
 	Available bool       `json:"available"`
 	Reason    string     `json:"reason,omitempty"`
 	Message   string     `json:"message,omitempty"`
@@ -86,11 +86,34 @@ type ObjectStore interface {
 	PresignGet(ctx context.Context, bucket, key string, ttl time.Duration) (string, error)
 }
 
-// DatasetFilesService resolves a Dataset version to its S3 location and serves
-// one directory level at a time. A nil store reports S3_DISABLED rather than
-// failing the request.
-type DatasetFilesService struct {
-	catalog    *DatasetCatalog
+// VersionStorage is the subset of a dataset/model version the file browser
+// needs. S3URI stays server-side.
+type VersionStorage struct {
+	Ref      string
+	Version  string
+	Strategy string
+	S3URI    string
+}
+
+// StorageStatus reports whether the catalog could resolve a version. It is the
+// generic form of the dataset/model catalog availability envelope.
+type StorageStatus struct {
+	Available bool
+	Reason    string
+	Message   string
+	Retryable bool
+}
+
+// StorageResolver maps a dataset or model version to its storage block.
+type StorageResolver interface {
+	ResolveVersionStorage(ctx context.Context, name, versionRef string) (VersionStorage, bool, StorageStatus)
+}
+
+// FilesService resolves a version to its S3 location and serves one directory
+// level at a time. A nil store reports S3_DISABLED rather than failing the
+// request. It is shared by the dataset and model libraries.
+type FilesService struct {
+	resolver   StorageResolver
 	store      ObjectStore
 	presignTTL time.Duration
 	cacheTTL   time.Duration
@@ -107,7 +130,7 @@ type filesCacheEntry struct {
 	expiresAt time.Time
 }
 
-func NewDatasetFilesService(cfg *config.Config, catalog *DatasetCatalog, store ObjectStore) *DatasetFilesService {
+func NewFilesService(cfg *config.Config, resolver StorageResolver, store ObjectStore) *FilesService {
 	presignTTL := cfg.S3PresignTTL
 	if presignTTL <= 0 {
 		presignTTL = 10 * time.Minute
@@ -120,8 +143,8 @@ func NewDatasetFilesService(cfg *config.Config, catalog *DatasetCatalog, store O
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &DatasetFilesService{
-		catalog:    catalog,
+	return &FilesService{
+		resolver:   resolver,
 		store:      store,
 		presignTTL: presignTTL,
 		cacheTTL:   cacheTTL,
@@ -131,35 +154,35 @@ func NewDatasetFilesService(cfg *config.Config, catalog *DatasetCatalog, store O
 	}
 }
 
-// List returns one directory level of a dataset version. found is false only
-// when the dataset or version does not exist; an unavailable catalog or S3
+// List returns one directory level of a dataset or model version. found is
+// false only when the version does not exist; an unavailable catalog or S3
 // problem is reported through the embedded status instead.
-func (s *DatasetFilesService) List(ctx context.Context, name, versionRef, rawPrefix, cursor string, limit int) (*DatasetFiles, bool) {
+func (s *FilesService) List(ctx context.Context, name, versionRef, rawPrefix, cursor string, limit int) (*FileListing, bool) {
 	now := s.now().UTC()
 
-	version, ok, status := s.catalog.VersionStorage(ctx, name, versionRef)
+	version, ok, status := s.resolver.ResolveVersionStorage(ctx, name, versionRef)
 	if !status.Available {
-		return &DatasetFiles{
-			DatasetFilesStatus: DatasetFilesStatus{
+		return &FileListing{
+			FilesStatus: FilesStatus{
 				Available:   false,
 				Reason:      status.Reason,
 				Message:     status.Message,
 				Retryable:   status.Retryable,
 				GeneratedAt: now,
 			},
-			Entries: []DatasetFileEntry{},
+			Entries: []FileEntry{},
 		}, true
 	}
 	if !ok {
 		return nil, false
 	}
 
-	files := &DatasetFiles{
-		DatasetFilesStatus: DatasetFilesStatus{Available: true, GeneratedAt: now},
-		Ref:                version.Ref,
-		Version:            version.Version,
-		Storage:            version.Strategy,
-		Entries:            []DatasetFileEntry{},
+	files := &FileListing{
+		FilesStatus: FilesStatus{Available: true, GeneratedAt: now},
+		Ref:         version.Ref,
+		Version:     version.Version,
+		Storage:     version.Strategy,
+		Entries:     []FileEntry{},
 	}
 
 	if version.Strategy != "S3" {
@@ -197,11 +220,11 @@ func (s *DatasetFilesService) List(ctx context.Context, name, versionRef, rawPre
 }
 
 // Download validates a relative path inside the version root and returns a
-// presigned GET URL. found is false only when the dataset/version is missing.
-func (s *DatasetFilesService) Download(ctx context.Context, name, versionRef, rawPath string) (*DatasetDownload, bool) {
-	version, ok, status := s.catalog.VersionStorage(ctx, name, versionRef)
+// presigned GET URL. found is false only when the version is missing.
+func (s *FilesService) Download(ctx context.Context, name, versionRef, rawPath string) (*FileDownload, bool) {
+	version, ok, status := s.resolver.ResolveVersionStorage(ctx, name, versionRef)
 	if !status.Available {
-		return &DatasetDownload{
+		return &FileDownload{
 			Available: false,
 			Reason:    status.Reason,
 			Message:   status.Message,
@@ -239,10 +262,10 @@ func (s *DatasetFilesService) Download(ctx context.Context, name, versionRef, ra
 		return unavailableDownload(retryable, reason), true
 	}
 	expires := s.now().Add(s.presignTTL).UTC()
-	return &DatasetDownload{Available: true, URL: url, ExpiresAt: &expires}, true
+	return &FileDownload{Available: true, URL: url, ExpiresAt: &expires}, true
 }
 
-func (s *DatasetFilesService) listPage(ctx context.Context, bucket, fullPrefix, cursor string, maxKeys int32) (*s3.ListPage, error) {
+func (s *FilesService) listPage(ctx context.Context, bucket, fullPrefix, cursor string, maxKeys int32) (*s3.ListPage, error) {
 	key := strings.Join([]string{bucket, fullPrefix, cursor, strconv.Itoa(int(maxKeys))}, "\x00")
 
 	if s.cacheTTL > 0 {
@@ -374,11 +397,11 @@ func normalizeRelative(raw string, allowEmpty bool) (string, error) {
 
 // projectEntries turns an S3 page into relative directory/file entries. The
 // bucket name and the version root prefix never leave this function.
-func projectEntries(page *s3.ListPage, rootPrefix, prefix string) []DatasetFileEntry {
+func projectEntries(page *s3.ListPage, rootPrefix, prefix string) []FileEntry {
 	if page == nil {
-		return []DatasetFileEntry{}
+		return []FileEntry{}
 	}
-	entries := make([]DatasetFileEntry, 0, len(page.Prefixes)+len(page.Objects))
+	entries := make([]FileEntry, 0, len(page.Prefixes)+len(page.Objects))
 	base := rootPrefix + "/" + prefix
 
 	for _, prefixKey := range page.Prefixes {
@@ -390,7 +413,7 @@ func projectEntries(page *s3.ListPage, rootPrefix, prefix string) []DatasetFileE
 		if trimmed == "" || strings.Contains(trimmed, "/") {
 			continue
 		}
-		entries = append(entries, DatasetFileEntry{
+		entries = append(entries, FileEntry{
 			Name: path.Base(trimmed),
 			Path: relative,
 			Type: "dir",
@@ -406,7 +429,7 @@ func projectEntries(page *s3.ListPage, rootPrefix, prefix string) []DatasetFileE
 		}
 		size := object.Size
 		modified := object.LastModified
-		entries = append(entries, DatasetFileEntry{
+		entries = append(entries, FileEntry{
 			Name:         path.Base(relative),
 			Path:         relative,
 			Type:         "file",
@@ -452,19 +475,19 @@ func clampLimit(limit int) int {
 	return limit
 }
 
-func (f *DatasetFiles) unavailable(reason string, retryable bool) *DatasetFiles {
+func (f *FileListing) unavailable(reason string, retryable bool) *FileListing {
 	f.Available = false
 	f.Reason = reason
 	f.Message = filesMessage(reason)
 	f.Retryable = retryable
-	f.Entries = []DatasetFileEntry{}
+	f.Entries = []FileEntry{}
 	f.Truncated = false
 	f.NextCursor = ""
 	return f
 }
 
-func unavailableDownload(retryable bool, reason string) *DatasetDownload {
-	return &DatasetDownload{
+func unavailableDownload(retryable bool, reason string) *FileDownload {
+	return &FileDownload{
 		Available: false,
 		Reason:    reason,
 		Message:   filesMessage(reason),

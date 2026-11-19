@@ -1,5 +1,11 @@
 import axios from 'axios'
 
+import type {
+  FileDownload,
+  FileDownloadParams,
+  FileListing,
+  FilesPageParams,
+} from '@/features/files/types'
 import { api, type ApiEnvelope } from '@/lib/api'
 
 import type { ModelDetail, ModelList } from './types'
@@ -35,4 +41,26 @@ export async function fetchModelDetail(name: string): Promise<ModelDetail> {
     }
     throw error
   }
+}
+
+export async function fetchModelFiles(
+  name: string,
+  params: FilesPageParams
+): Promise<FileListing> {
+  const response = await api.get<ApiEnvelope<FileListing>>(
+    `/models/${encodeURIComponent(name)}/files`,
+    { params }
+  )
+  return unwrap(response.data)
+}
+
+export async function fetchModelDownloadUrl(
+  name: string,
+  params: FileDownloadParams
+): Promise<FileDownload> {
+  const response = await api.get<ApiEnvelope<FileDownload>>(
+    `/models/${encodeURIComponent(name)}/files/download`,
+    { params }
+  )
+  return unwrap(response.data)
 }
