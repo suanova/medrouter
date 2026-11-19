@@ -186,6 +186,11 @@ config:
   # URL path prefix, e.g. "/medrouter". The Ingress and the HTTPRoute publish
   # this exact prefix; no rewrite is applied. Empty means the site root.
   BASE_PATH: ""
+  # Prefix the API lives under; the app mounts the API at API_PREFIX + "/api",
+  # so the default exposes it at /medrouter/api. "/" puts it at /api. When
+  # BASE_PATH is set, API_PREFIX must stay under it so the published route
+  # reaches the API.
+  API_PREFIX: "/medrouter"
   # Browser-visible origin. Empty means: https://<first ingress host> when the
   # Ingress is enabled, https://<first gateway hostname> when
   # gateway.hostnames is set, otherwise http://localhost:<PORT>. It MUST match

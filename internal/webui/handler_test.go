@@ -28,7 +28,7 @@ func do(t *testing.T, h http.Handler, method, target string) *httptest.ResponseR
 }
 
 func TestServesSPAAndAssets(t *testing.T) {
-	h := New(testDist(), "")
+	h := New(testDist(), "", "/api")
 
 	rec := do(t, h, http.MethodGet, "/")
 	if rec.Code != http.StatusOK {
@@ -85,7 +85,7 @@ func TestServesSPAAndAssets(t *testing.T) {
 }
 
 func TestInjectsBasePath(t *testing.T) {
-	h := New(testDist(), "/medrouter")
+	h := New(testDist(), "/medrouter", "/medrouter/api")
 
 	if rec := do(t, h, http.MethodGet, "/"); rec.Code != http.StatusNotFound {
 		t.Fatalf("root outside base path = %d", rec.Code)
@@ -119,7 +119,7 @@ func TestInjectsBasePath(t *testing.T) {
 }
 
 func TestHeadAndMissingBuild(t *testing.T) {
-	h := New(testDist(), "")
+	h := New(testDist(), "", "/api")
 	rec := do(t, h, http.MethodHead, "/")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("HEAD / = %d", rec.Code)
@@ -129,7 +129,7 @@ func TestHeadAndMissingBuild(t *testing.T) {
 	}
 
 	// A filesystem without the embedded build reports how to build it.
-	h = New(fstest.MapFS{"other/file.txt": &fstest.MapFile{Data: []byte("x")}}, "")
+	h = New(fstest.MapFS{"other/file.txt": &fstest.MapFile{Data: []byte("x")}}, "", "/api")
 	rec = do(t, h, http.MethodGet, "/")
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing build = %d", rec.Code)
@@ -141,28 +141,36 @@ func TestHeadAndMissingBuild(t *testing.T) {
 
 func TestInjectBasePathEdgeCases(t *testing.T) {
 	// No literal <head>: inject before </head>.
-	got := string(injectBasePath([]byte("<html></head><body></body></html>"), "/x"))
+	got := string(injectBasePath([]byte("<html></head><body></body></html>"), "/x", "/x/api"))
 	if !strings.Contains(got, `<base href="/x/">`) || strings.Contains(got, "<head><base") {
 		t.Fatalf("injection without head: %s", got)
 	}
 
 	// A document without head is left alone.
-	if got := injectBasePath([]byte("<html></html>"), "/x"); string(got) != "<html></html>" {
+	if got := injectBasePath([]byte("<html></html>"), "/x", "/x/api"); string(got) != "<html></html>" {
 		t.Fatalf("unexpected injection: %s", got)
 	}
 
 	// An empty base path still gets a root-relative <base> so deep links keep
-	// loading the fingerprint-named assets, but no base path global.
-	if got := string(injectBasePath([]byte("<head></head>"), "")); got != `<head><base href="/"></head>` {
+	// loading the fingerprint-named assets, and the API base is always
+	// injected.
+	if got := string(injectBasePath([]byte("<head></head>"), "", "/api")); got != `<head><base href="/"><script>window.__API_BASE__="/api";</script></head>` {
 		t.Fatalf("unexpected empty base injection: %s", got)
 	}
 
-	// Attribute and script values are escaped.
-	got = string(injectBasePath([]byte("<head></head>"), `/a"><script>alert(1)</script>`))
+	// A custom API prefix is injected so a site served at the root calls
+	// /medrouter/api instead of /api.
+	if got := string(injectBasePath([]byte("<head></head>"), "", "/medrouter/api")); !strings.Contains(got, `window.__API_BASE__="/medrouter/api"`) {
+		t.Fatalf("api base was not injected: %s", got)
+	}
+
+	// Attribute and script values are escaped (base path + API base scripts).
+	const hostileBase = `/a"><script>alert(1)</script>`
+	got = string(injectBasePath([]byte("<head></head>"), hostileBase, hostileBase+"/api"))
 	if strings.Contains(got, `href="/a"><script>`) {
 		t.Fatalf("base href was not escaped: %s", got)
 	}
-	if strings.Count(got, "</script>") != 1 || !strings.Contains(got, `</script>`) {
+	if strings.Count(got, "</script>") != 2 || !strings.Contains(got, `</script>`) {
 		t.Fatalf("script value was not escaped: %s", got)
 	}
 }

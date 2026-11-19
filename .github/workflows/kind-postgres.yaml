@@ -429,11 +429,18 @@ jobs:
           curl -fsS http://127.0.0.1:3000/sign-in | grep -q '<div id="root"'
 
           echo "status:"
-          curl -fsS http://127.0.0.1:3000/api/status | tee /tmp/status.json
+          curl -fsS http://127.0.0.1:3000/medrouter/api/status | tee /tmp/status.json
           jq -e '.success == true' /tmp/status.json >/dev/null
 
+          # The old unprefixed API path must be gone, and must not fall back
+          # to the SPA shell (a JSON 404 is the expected shape).
+          if curl -fsS http://127.0.0.1:3000/api/status >/dev/null 2>&1; then
+            echo "old /api/status should be a 404" >&2
+            exit 1
+          fi
+
           echo "register:"
-          curl -fsS -X POST http://127.0.0.1:3000/api/user/register \
+          curl -fsS -X POST http://127.0.0.1:3000/medrouter/api/user/register \
             -H 'Content-Type: application/json' \
             -H 'Origin: http://localhost:3000' \
             -d '{"username":"ciuser","email":"ci@example.com","password":"CiPassw0rd"}' \
@@ -441,7 +448,7 @@ jobs:
           jq -e '.success == true and .data.user.username == "ciuser"' /tmp/register.json >/dev/null
 
           echo "login:"
-          curl -fsS -c /tmp/cookies.txt -X POST http://127.0.0.1:3000/api/user/login \
+          curl -fsS -c /tmp/cookies.txt -X POST http://127.0.0.1:3000/medrouter/api/user/login \
             -H 'Content-Type: application/json' \
             -H 'Origin: http://localhost:3000' \
             -d '{"username":"ciuser","password":"CiPassw0rd"}' \
@@ -449,7 +456,7 @@ jobs:
           jq -e '.success == true' /tmp/login.json >/dev/null
 
           echo "self:"
-          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:3000/api/user/self \
+          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:3000/medrouter/api/user/self \
             | tee /tmp/self.json
           jq -e '.success == true and .data.user.username == "ciuser"' /tmp/self.json >/dev/null
 
@@ -471,7 +478,7 @@ jobs:
           # The catalog caches a CRD_MISSING result for a minute; poll until the
           # fixtures are picked up instead of racing the cache.
           for i in $(seq 1 90); do
-            curl -fsS http://127.0.0.1:3000/api/models > /tmp/models.json || true
+            curl -fsS http://127.0.0.1:3000/medrouter/api/models > /tmp/models.json || true
             if jq -e '.data.available == true and .data.total == 1' /tmp/models.json >/dev/null 2>&1; then
               break
             fi
@@ -507,7 +514,7 @@ jobs:
           ' /tmp/models.json >/dev/null
 
           echo "detail:"
-          curl -fsS http://127.0.0.1:3000/api/models/demo-model > /tmp/model-detail.json
+          curl -fsS http://127.0.0.1:3000/medrouter/api/models/demo-model > /tmp/model-detail.json
           cat /tmp/model-detail.json | jq .
           jq -e '
             .data.available == true and
@@ -528,7 +535,7 @@ jobs:
           ' /tmp/model-detail.json >/dev/null
 
           # Lookups by ModelVersion metadata.name resolve to the same group.
-          curl -fsS http://127.0.0.1:3000/api/models/demo-model-v1-1-0 \
+          curl -fsS http://127.0.0.1:3000/medrouter/api/models/demo-model-v1-1-0 \
             | jq -e '.data.model == "demo-model"' >/dev/null
 
           # Storage locations and credential names must never leave the cluster.
@@ -538,7 +545,7 @@ jobs:
           fi
 
           status=$(curl -s -o /tmp/model-404.json -w '%{http_code}' \
-            http://127.0.0.1:3000/api/models/no-such-model)
+            http://127.0.0.1:3000/medrouter/api/models/no-such-model)
           test "$status" = "404"
           jq -e '.success == false and .code == "MODEL_NOT_FOUND"' /tmp/model-404.json >/dev/null
 
@@ -548,7 +555,7 @@ jobs:
           # Same CRD_MISSING negative cache as the model catalog: poll instead
           # of racing the one-minute backoff.
           for i in $(seq 1 90); do
-            curl -fsS http://127.0.0.1:3000/api/datasets > /tmp/datasets.json || true
+            curl -fsS http://127.0.0.1:3000/medrouter/api/datasets > /tmp/datasets.json || true
             if jq -e '.data.available == true and .data.total == 1' /tmp/datasets.json >/dev/null 2>&1; then
               break
             fi
@@ -589,7 +596,7 @@ jobs:
           ' /tmp/datasets.json >/dev/null
 
           echo "detail:"
-          curl -fsS http://127.0.0.1:3000/api/datasets/demo-dataset > /tmp/dataset-detail.json
+          curl -fsS http://127.0.0.1:3000/medrouter/api/datasets/demo-dataset > /tmp/dataset-detail.json
           cat /tmp/dataset-detail.json | jq .
           jq -e '
             .data.available == true and
@@ -610,7 +617,7 @@ jobs:
           ' /tmp/dataset-detail.json >/dev/null
 
           # Lookups by Dataset metadata.name resolve to the same group.
-          curl -fsS http://127.0.0.1:3000/api/datasets/demo-dataset-v1-0-0 \
+          curl -fsS http://127.0.0.1:3000/medrouter/api/datasets/demo-dataset-v1-0-0 \
             | jq -e '.data.dataset == "demo-dataset"' >/dev/null
 
           # Storage locations, paths and credential names stay in the cluster.
@@ -620,7 +627,7 @@ jobs:
           fi
 
           status=$(curl -s -o /tmp/dataset-404.json -w '%{http_code}' \
-            http://127.0.0.1:3000/api/datasets/no-such-dataset)
+            http://127.0.0.1:3000/medrouter/api/datasets/no-such-dataset)
           test "$status" = "404"
           jq -e '.success == false and .code == "DATASET_NOT_FOUND"' /tmp/dataset-404.json >/dev/null
 
@@ -646,8 +653,8 @@ jobs:
           # Cached data stays available for the stale window, so allow enough
           # time for that window to expire before requiring FORBIDDEN.
           for i in $(seq 1 120); do
-            curl -fsS http://127.0.0.1:3000/api/models > /tmp/models-forbidden.json || true
-            curl -fsS http://127.0.0.1:3000/api/datasets > /tmp/datasets-forbidden.json || true
+            curl -fsS http://127.0.0.1:3000/medrouter/api/models > /tmp/models-forbidden.json || true
+            curl -fsS http://127.0.0.1:3000/medrouter/api/datasets > /tmp/datasets-forbidden.json || true
             if jq -e '.data.available == false and .data.reason == "FORBIDDEN"' /tmp/models-forbidden.json >/dev/null 2>&1 &&
                jq -e '.data.available == false and .data.reason == "FORBIDDEN"' /tmp/datasets-forbidden.json >/dev/null 2>&1; then
               break
@@ -686,8 +693,8 @@ jobs:
 
           # And both catalogs recover once access is restored.
           for i in $(seq 1 60); do
-            curl -fsS http://127.0.0.1:3000/api/models > /tmp/models-restored.json || true
-            curl -fsS http://127.0.0.1:3000/api/datasets > /tmp/datasets-restored.json || true
+            curl -fsS http://127.0.0.1:3000/medrouter/api/models > /tmp/models-restored.json || true
+            curl -fsS http://127.0.0.1:3000/medrouter/api/datasets > /tmp/datasets-restored.json || true
             if jq -e '.data.available == true and .data.total == 1' /tmp/models-restored.json >/dev/null 2>&1 &&
                jq -e '.data.available == true and .data.total == 1' /tmp/datasets-restored.json >/dev/null 2>&1; then
               break

@@ -10,6 +10,7 @@ data:
   SYSTEM_NAME: {{ .Values.config.SYSTEM_NAME | quote }}
   PORT: {{ .Values.config.PORT | quote }}
   BASE_PATH: {{ include "medrouter.basePath" . | quote }}
+  API_PREFIX: {{ include "medrouter.apiPrefix" . | quote }}
   PUBLIC_ORIGIN: {{ include "medrouter.publicOrigin" . | quote }}
   REGISTER_ENABLED: {{ .Values.config.REGISTER_ENABLED | quote }}
   EMAIL_VERIFICATION_ENABLED: {{ .Values.config.EMAIL_VERIFICATION_ENABLED | quote }}

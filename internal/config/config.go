@@ -18,9 +18,14 @@ const (
 )
 
 type Config struct {
-	AppEnv         string
-	Port           string
+	AppEnv string
+	Port   string
+	// BasePath is the site prefix ("" at the root). APIPrefix is the prefix the
+	// API lives under; the API is mounted at APIPrefix + "/api", so the default
+	// "/medrouter" exposes it at /medrouter/api. "/" (normalized to "") puts it
+	// at /api.
 	BasePath       string
+	APIPrefix      string
 	PublicOrigin   string
 	SystemName     string
 	Version        string
@@ -95,10 +100,17 @@ func Load() (*Config, error) {
 
 	appEnv := strings.ToLower(getenv("APP_ENV", "development"))
 
+	basePath := normalizeBasePath(os.Getenv("BASE_PATH"))
+	apiPrefix, err := normalizeAPIPrefix(os.Getenv("API_PREFIX"))
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		AppEnv:         appEnv,
 		Port:           getenv("PORT", "3000"),
-		BasePath:       normalizeBasePath(os.Getenv("BASE_PATH")),
+		BasePath:       basePath,
+		APIPrefix:      apiPrefix,
 		PublicOrigin:   strings.TrimRight(getenv("PUBLIC_ORIGIN", "http://localhost:5173"), "/"),
 		SystemName:     getenv("SYSTEM_NAME", "MedRouter"),
 		Version:        Version,
@@ -189,8 +201,25 @@ func Load() (*Config, error) {
 func (c *Config) IsProduction() bool { return c.AppEnv == "production" }
 
 // CallbackURL returns the OAuth callback registered with the provider.
+//
+// OAuthRedirectBase is the origin plus site prefix (it defaults to
+// PublicOrigin + BasePath). The API path is expressed relative to that base,
+// so with the default API_PREFIX=/medrouter and BasePath="" the callback is
+// <origin>/medrouter/api/oauth/...; when the site itself is at /medrouter the
+// relative API path is /api and the result stays <origin>/medrouter/api/....
 func (c *Config) CallbackURL(provider string) string {
-	return fmt.Sprintf("%s/api/oauth/%s/callback", c.OAuthRedirectBase, provider)
+	return fmt.Sprintf("%s%s/oauth/%s/callback", c.OAuthRedirectBase, c.apiPath(), provider)
+}
+
+// APIPath is the absolute path the API routes are mounted at.
+func (c *Config) APIPath() string {
+	return c.APIPrefix + "/api"
+}
+
+// apiPath is the API path relative to OAuthRedirectBase, which already carries
+// BASE_PATH.
+func (c *Config) apiPath() string {
+	return strings.TrimPrefix(c.APIPath(), c.BasePath)
 }
 
 // FrontendPath prefixes an absolute frontend path with BASE_PATH.
@@ -210,6 +239,27 @@ func normalizeBasePath(raw string) string {
 		return ""
 	}
 	return "/" + raw
+}
+
+// normalizeAPIPrefix resolves API_PREFIX, defaulting to "/medrouter" so the
+// API lives at /medrouter/api. The result is a prefix with no trailing slash
+// ("/medrouter"), or "" for the root, where the API is at /api.
+func normalizeAPIPrefix(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "/medrouter", nil
+	}
+	clean := strings.Trim(raw, "/")
+	if clean == "" {
+		// "/" means the API sits directly under /api.
+		return "", nil
+	}
+	for _, segment := range strings.Split(clean, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", fmt.Errorf("API_PREFIX must not contain empty, . or .. path segments, got %q", raw)
+		}
+	}
+	return "/" + clean, nil
 }
 
 func splitCSV(raw string) []string {

@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-import { basePath } from '@/lib/base-path'
+import { apiBase } from '@/lib/base-path'
 import { useAuthStore } from '@/stores/auth-store'
 
 export interface ApiEnvelope<T> {
@@ -11,7 +11,7 @@ export interface ApiEnvelope<T> {
 }
 
 export const api = axios.create({
-  baseURL: `${basePath}/api`,
+  baseURL: apiBase,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
   timeout: 20_000,

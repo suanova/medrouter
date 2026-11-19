@@ -206,7 +206,7 @@ func (s *OAuthService) ClearStateCookie() *http.Cookie {
 	return &http.Cookie{
 		Name:     oauthStateCookieName,
 		Value:    "",
-		Path:     s.cfg.BasePath + "/api/oauth",
+		Path:     s.cfg.APIPath() + "/oauth",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   s.cfg.SessionCookieSecure,
@@ -224,7 +224,7 @@ func (s *OAuthService) sealStateCookie(payload oauthStatePayload) (*http.Cookie,
 	return &http.Cookie{
 		Name:     oauthStateCookieName,
 		Value:    encoded + "." + signature,
-		Path:     s.cfg.BasePath + "/api/oauth",
+		Path:     s.cfg.APIPath() + "/oauth",
 		MaxAge:   int(oauthStateTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   s.cfg.SessionCookieSecure,
