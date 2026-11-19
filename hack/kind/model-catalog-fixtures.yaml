@@ -6,7 +6,7 @@
 # into one entry, prefer the annotations of the newest version and report both
 # versions as compatible with demo-qwen-bf16.
 #
-# The two Datasets share spec.dataset, so /api/datasets must collapse them the
+# The two Datasets share spec.dataset, so /medrouter/api/datasets must collapse them the
 # same way: latest v1.1.0, version_count 2, cluster-scoped lookups by either
 # the semantic name or a metadata.name.
 apiVersion: ai.cubestack.io/v1alpha1
