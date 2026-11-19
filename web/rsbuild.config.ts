@@ -57,13 +57,21 @@ export default defineConfig(({ envMode }) => {
     performance: {
       removeConsole: isProd ? ['log'] : false,
       buildCache: false,
+      // The platform edge resets individual requests under load, so a cold
+      // load that fans out into many JS files is more likely to lose one.
+      // Production ships the entry code as a single chunk; route-level lazy
+      // chunks (added by the router plugin) stay async.
+      ...(isProd ? { chunkSplit: { strategy: 'all-in-one' as const } } : {}),
     },
     tools: {
       rspack: {
         plugins: [
           tanstackRouter({
             target: 'react',
-            autoCodeSplitting: isProd,
+            // Ship one JS file: the edge resets individual requests under
+            // load, so fewer concurrent chunks is worth the slightly larger
+            // initial bundle for this catalog-sized app.
+            autoCodeSplitting: false,
           }),
         ],
       },
