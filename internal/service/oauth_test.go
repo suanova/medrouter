@@ -36,6 +36,7 @@ func newOAuthTest(t *testing.T) (*OAuthService, *config.Config) {
 		AppEnv:                   "test",
 		SystemName:               "MedRouter",
 		PublicOrigin:             "http://example.test",
+		APIPrefix:                "",
 		SessionSecret:            "oauth-test-session-secret-0123456789",
 		SessionCookieName:        "medrouter_session",
 		SessionTTL:               time.Hour,

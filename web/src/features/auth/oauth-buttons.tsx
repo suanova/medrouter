@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { buttonVariants } from '@/components/ui/button'
 import type { OAuthProviderInfo } from '@/features/auth/types'
-import { withBasePath } from '@/lib/base-path'
+import { withApiBase } from '@/lib/base-path'
 import { cn } from '@/lib/utils'
 
 interface OAuthButtonsProps {
@@ -41,7 +41,7 @@ export function OAuthButtons({ providers, redirectTo }: OAuthButtonsProps) {
           return (
             <a
               key={provider.id}
-              href={withBasePath(`/api/oauth/${provider.id}/start?redirect=${redirect}`)}
+              href={withApiBase(`/oauth/${provider.id}/start?redirect=${redirect}`)}
               className={cn(
                 buttonVariants({ variant: 'outline' }),
                 'h-11 w-full justify-center gap-2 rounded-lg'

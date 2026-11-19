@@ -23,7 +23,7 @@ var envKeys = []string{
 	"LOGIN_RATE_LIMIT_PER_MINUTE", "REGISTER_RATE_LIMIT_PER_HOUR",
 	"MODEL_LIBRARY_ENABLED", "MODEL_LIBRARY_API_URL",
 	"MODEL_LIBRARY_CACHE_TTL_SECONDS", "MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS",
-		"MODEL_LIBRARY_OVERVIEW_NAMESPACE",
+	"MODEL_LIBRARY_OVERVIEW_NAMESPACE",
 	"DATASET_LIBRARY_ENABLED", "DATASET_LIBRARY_API_URL",
 	"DATASET_LIBRARY_CACHE_TTL_SECONDS", "DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS",
 }
@@ -54,7 +54,13 @@ func TestLoadDevelopmentDefaults(t *testing.T) {
 	if cfg.OAuthRedirectBase != cfg.PublicOrigin {
 		t.Fatalf("redirect base = %q", cfg.OAuthRedirectBase)
 	}
-	if got := cfg.CallbackURL("github"); got != "http://localhost:5173/api/oauth/github/callback" {
+	if cfg.APIPrefix != "/medrouter" {
+		t.Fatalf("api prefix = %q", cfg.APIPrefix)
+	}
+	if cfg.APIPath() != "/medrouter/api" {
+		t.Fatalf("api path = %q", cfg.APIPath())
+	}
+	if got := cfg.CallbackURL("github"); got != "http://localhost:5173/medrouter/api/oauth/github/callback" {
 		t.Fatalf("callback = %q", got)
 	}
 	if got := cfg.FrontendPath("/dashboard"); got != "/dashboard" {
@@ -120,6 +126,53 @@ func TestLoadBasePath(t *testing.T) {
 	}
 	if got := cfg.CallbackURL("google"); got != "https://auth.example.com/prefix/api/oauth/google/callback" {
 		t.Fatalf("callback = %q", got)
+	}
+}
+
+func TestLoadAPIPrefix(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("API_PREFIX", "/medrouter/")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.APIPrefix != "/medrouter" {
+		t.Fatalf("api prefix = %q", cfg.APIPrefix)
+	}
+	if cfg.APIPath() != "/medrouter/api" {
+		t.Fatalf("api path = %q", cfg.APIPath())
+	}
+	if got := cfg.CallbackURL("google"); got != "http://localhost:5173/medrouter/api/oauth/google/callback" {
+		t.Fatalf("callback = %q", got)
+	}
+
+	// "/" puts the API directly under /api; the default is /medrouter even
+	// when the site itself is served from another prefix.
+	t.Setenv("API_PREFIX", "/")
+	t.Setenv("BASE_PATH", "/site")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.APIPrefix != "" || cfg.APIPath() != "/api" {
+		t.Fatalf("root api prefix = %q path = %q", cfg.APIPrefix, cfg.APIPath())
+	}
+
+	t.Setenv("API_PREFIX", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.APIPath() != "/medrouter/api" {
+		t.Fatalf("default api path = %q", cfg.APIPath())
+	}
+
+	for _, bad := range []string{"/med/../api", "/med//api", "/med/./api"} {
+		t.Setenv("API_PREFIX", bad)
+		if _, err := Load(); err == nil {
+			t.Fatalf("API_PREFIX=%q should be rejected", bad)
+		}
 	}
 }
 

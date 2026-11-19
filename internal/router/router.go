@@ -38,7 +38,8 @@ func New(d Deps) *gin.Engine {
 	_ = engine.SetTrustedProxies(d.Config.TrustedProxies)
 
 	basePath := d.Config.BasePath
-	api := engine.Group(basePath + "/api")
+	apiPrefix := d.Config.APIPath()
+	api := engine.Group(apiPrefix)
 	api.Use(middleware.LimitBody(), middleware.RequireSameOrigin(d.Config.PublicOrigin))
 
 	api.GET("/status", d.Status.Get)
@@ -59,12 +60,20 @@ func New(d Deps) *gin.Engine {
 
 	engine.GET(basePath+"/healthz", d.Status.Health)
 
-	static := webui.New(d.Static, basePath)
-	apiPrefix := basePath + "/api"
+	static := webui.New(d.Static, basePath, apiPrefix)
+	// Where the API used to live before API_PREFIX moved it. Keep it a JSON
+	// 404 instead of the SPA shell so API clients cannot mistake HTML for a
+	// response. When API_PREFIX is still the default the first check covers it.
+	legacyAPIPrefix := basePath + "/api"
 	engine.NoRoute(func(c *gin.Context) {
 		requestPath := c.Request.URL.Path
 		if requestPath == apiPrefix || strings.HasPrefix(requestPath, apiPrefix+"/") {
 			common.Fail(c, common.NewAPIErrorStatus(http.StatusNotFound, "NOT_FOUND", "API endpoint not found"))
+			return
+		}
+		if apiPrefix != legacyAPIPrefix &&
+			(requestPath == legacyAPIPrefix || strings.HasPrefix(requestPath, legacyAPIPrefix+"/")) {
+			common.Fail(c, common.NewAPIErrorStatus(http.StatusNotFound, "NOT_FOUND", "API endpoint not found; the API moved to "+apiPrefix))
 			return
 		}
 		static.ServeHTTP(c.Writer, c.Request)

@@ -107,7 +107,7 @@ BASE_PATH=/medrouter
 PUBLIC_ORIGIN=https://example.com
 ```
 
-Go 会在 SPA HTML 中注入 `<base href="/medrouter/">` 和 `window.__BASE_PATH__`，API、Cookie Path 与 OAuth 回调都会自动带上前缀。
+Go 会在 SPA HTML 中注入 `<base href="/medrouter/">` 和 `window.__BASE_PATH__`，API、Cookie Path 与 OAuth 回调都会自动带上前缀。API 独立前缀由 `API_PREFIX` 控制，默认 `/medrouter`，实际接口位于 `/medrouter/api`；服务端会同时注入 `window.__API_BASE__`，前端与 OAuth 回调随之切换。
 
 ## Kubernetes / Helm
 
@@ -164,6 +164,7 @@ CI 工作流 [`.github/workflows/kind-postgres.yaml`](.github/workflows/kind-pos
 | `APP_ENV` | `development` | 设为 `production` 启用生产校验与安全默认值 |
 | `PORT` | `3000` | Go 服务端口 |
 | `BASE_PATH` | 空 | 子路径部署前缀 |
+| `API_PREFIX` | `/medrouter` | API 前缀；实际挂载在 `${API_PREFIX}/api`（默认 `/medrouter/api`）。`/` 表示直接使用 `/api` |
 | `PUBLIC_ORIGIN` | `http://localhost:5173` | 浏览器访问源；同源校验与 OAuth 回调依赖它 |
 | `SESSION_SECRET` | 开发固定值 | 生产必填，≥32 字符；轮换会让所有会话失效 |
 | `REGISTER_ENABLED` | `true` | 关闭后禁止注册 |
@@ -190,9 +191,9 @@ CI 工作流 [`.github/workflows/kind-postgres.yaml`](.github/workflows/kind-pos
 
 | 提供商 | 变量 | 回调 URL |
 |---|---|---|
-| GitHub | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | `${PUBLIC_ORIGIN}${BASE_PATH}/api/oauth/github/callback` |
-| Google | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `${PUBLIC_ORIGIN}${BASE_PATH}/api/oauth/google/callback` |
-| 通用 OIDC | `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | `${PUBLIC_ORIGIN}${BASE_PATH}/api/oauth/oidc/callback` |
+| GitHub | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | `${PUBLIC_ORIGIN}${API_PREFIX}/api/oauth/github/callback` |
+| Google | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `${PUBLIC_ORIGIN}${API_PREFIX}/api/oauth/google/callback` |
+| 通用 OIDC | `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | `${PUBLIC_ORIGIN}${API_PREFIX}/api/oauth/oidc/callback` |
 
 - Google 使用 OIDC discovery，会校验 `iss`、`aud`、`exp`、`nonce`。
 - 通用 OIDC 的显示名称由 `OIDC_DISPLAY_NAME` 控制。

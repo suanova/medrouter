@@ -15,20 +15,24 @@ import (
 const buildHint = "The frontend has not been built.\nRun: cd web && bun install && bun run build\n"
 
 // New returns a handler that serves the embedded SPA under basePath. Missing
-// non-asset paths fall back to index.html for client-side routing.
-func New(dist fs.FS, basePath string) http.Handler {
+// non-asset paths fall back to index.html for client-side routing. apiBase is
+// the absolute API prefix (e.g. "/medrouter/api"); when it differs from the
+// site-relative default it is injected into the shell so the frontend calls the
+// right host path even when the site itself is served at the root.
+func New(dist fs.FS, basePath, apiBase string) http.Handler {
 	var sub fs.FS
 	if dist != nil {
 		if s, err := fs.Sub(dist, "web/dist"); err == nil {
 			sub = s
 		}
 	}
-	return &handler{dist: sub, basePath: basePath}
+	return &handler{dist: sub, basePath: basePath, apiBase: apiBase}
 }
 
 type handler struct {
 	dist     fs.FS
 	basePath string
+	apiBase  string
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -112,18 +116,20 @@ func (h *handler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	header.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(injectBasePath(data, h.basePath))
+		_, _ = w.Write(injectBasePath(data, h.basePath, h.apiBase))
 	}
 }
 
 // injectBasePath writes a <base> tag and, behind a path prefix,
 // window.__BASE_PATH__ into the SPA shell so the same frontend build works at
-// the site root or behind a prefix. The <base> tag is always emitted: the
-// built HTML references static assets relatively, so without it a deep link
-// such as /datasets/demo-dataset would resolve them under /datasets/.
+// the site root or behind a prefix. When the API lives outside the site's
+// default /api path (API_PREFIX), window.__API_BASE__ carries its absolute
+// path. The <base> tag is always emitted: the built HTML references static
+// assets relatively, so without it a deep link such as /datasets/demo-dataset
+// would resolve them under /datasets/.
 // json.Marshal escapes quotes, angle brackets and ampersands, so the value
 // cannot terminate the inline script; the href is HTML-escaped too.
-func injectBasePath(index []byte, basePath string) []byte {
+func injectBasePath(index []byte, basePath, apiBase string) []byte {
 	tag := "<base href=\"" + html.EscapeString(basePath+"/") + "\">"
 	if basePath != "" {
 		encoded, err := json.Marshal(basePath)
@@ -131,6 +137,13 @@ func injectBasePath(index []byte, basePath string) []byte {
 			return index
 		}
 		tag += "<script>window.__BASE_PATH__=" + string(encoded) + ";</script>"
+	}
+	if apiBase != "" {
+		encoded, err := json.Marshal(apiBase)
+		if err != nil {
+			return index
+		}
+		tag += "<script>window.__API_BASE__=" + string(encoded) + ";</script>"
 	}
 	snippet := []byte("<head>" + tag)
 	if bytes.Contains(index, []byte("<head>")) {

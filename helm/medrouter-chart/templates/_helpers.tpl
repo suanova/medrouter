@@ -62,6 +62,40 @@ Normalized BASE_PATH: "", or "/foo" without a trailing slash.
 {{- end -}}
 
 {{/*
+Normalized API_PREFIX: the prefix the API lives under; the app mounts it at
+API_PREFIX + "/api" (default /medrouter -> /medrouter/api). "/" means the API
+is at /api. When BASE_PATH is set, the API must live under it so the published
+Ingress/HTTPRoute (which routes the site prefix) reaches it.
+*/}}
+{{- define "medrouter.apiPrefix" -}}
+{{- $base := include "medrouter.basePath" . -}}
+{{- $raw := trim (toString .Values.config.API_PREFIX) -}}
+{{- if not $raw -}}
+{{- printf "/medrouter" -}}
+{{- else if eq $raw "/" -}}
+{{- printf "/" -}}
+{{- else -}}
+{{- $clean := trimAll "/" $raw -}}
+{{- if not $clean -}}
+{{- fail (printf "config.API_PREFIX must be a prefix such as /medrouter or /, got %q" $raw) -}}
+{{- end -}}
+{{- if not (regexMatch "^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$" $clean) -}}
+{{- fail (printf "config.API_PREFIX must be a prefix such as /medrouter or /, got %q" $raw) -}}
+{{- end -}}
+{{- range $segment := splitList "/" $clean -}}
+{{- if or (eq $segment ".") (eq $segment "..") -}}
+{{- fail (printf "config.API_PREFIX must not contain . or .. path segments, got %q" $raw) -}}
+{{- end -}}
+{{- end -}}
+{{- $api := printf "/%s" $clean -}}
+{{- if and $base (not (hasPrefix $base $api)) -}}
+{{- fail (printf "config.API_PREFIX (%s) must start with config.BASE_PATH (%s)" $api $base) -}}
+{{- end -}}
+{{- $api -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Browser-visible origin. Configured value wins; otherwise derive it from the
 first Ingress host (https when TLS is enabled) or, for a Gateway-only install,
 from the first HTTPRoute hostname (the platform Gateway terminates TLS, so
@@ -336,7 +370,7 @@ ConfigMap, which is always rendered.
 {{- end -}}
 {{- end -}}
 
-{{- $reserved := list "APP_ENV" "PORT" "BASE_PATH" "PUBLIC_ORIGIN" "SYSTEM_NAME" "REGISTER_ENABLED" "EMAIL_VERIFICATION_ENABLED" "EMAIL_DEBUG_MODE" "ALLOW_EMAIL_DEBUG_IN_PRODUCTION" "SESSION_COOKIE_SECURE" "SESSION_TTL_DAYS" "SESSION_TOUCH_INTERVAL_SECONDS" "TRUSTED_PROXIES" "SMTP_HOST" "SMTP_PORT" "SMTP_TLS_MODE" "SMTP_FROM" "SMTP_USERNAME" "GITHUB_CLIENT_ID" "GOOGLE_CLIENT_ID" "OIDC_ISSUER_URL" "OIDC_CLIENT_ID" "OIDC_DISPLAY_NAME" "OIDC_SCOPES" "INITIAL_ADMIN_USERNAME" "INITIAL_ADMIN_EMAIL" "SQLITE_PATH" "SQL_DSN" "SESSION_SECRET" "MODEL_LIBRARY_ENABLED" "MODEL_LIBRARY_CACHE_TTL_SECONDS" "MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS" "MODEL_LIBRARY_OVERVIEW_NAMESPACE" "DATASET_LIBRARY_ENABLED" "DATASET_LIBRARY_CACHE_TTL_SECONDS" "DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS" -}}
+{{- $reserved := list "APP_ENV" "PORT" "BASE_PATH" "API_PREFIX" "PUBLIC_ORIGIN" "SYSTEM_NAME" "REGISTER_ENABLED" "EMAIL_VERIFICATION_ENABLED" "EMAIL_DEBUG_MODE" "ALLOW_EMAIL_DEBUG_IN_PRODUCTION" "SESSION_COOKIE_SECURE" "SESSION_TTL_DAYS" "SESSION_TOUCH_INTERVAL_SECONDS" "TRUSTED_PROXIES" "SMTP_HOST" "SMTP_PORT" "SMTP_TLS_MODE" "SMTP_FROM" "SMTP_USERNAME" "GITHUB_CLIENT_ID" "GOOGLE_CLIENT_ID" "OIDC_ISSUER_URL" "OIDC_CLIENT_ID" "OIDC_DISPLAY_NAME" "OIDC_SCOPES" "INITIAL_ADMIN_USERNAME" "INITIAL_ADMIN_EMAIL" "SQLITE_PATH" "SQL_DSN" "SESSION_SECRET" "MODEL_LIBRARY_ENABLED" "MODEL_LIBRARY_CACHE_TTL_SECONDS" "MODEL_LIBRARY_REQUEST_TIMEOUT_SECONDS" "MODEL_LIBRARY_OVERVIEW_NAMESPACE" "DATASET_LIBRARY_ENABLED" "DATASET_LIBRARY_CACHE_TTL_SECONDS" "DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS" -}}
 {{- range $key, $_ := (default (dict) .Values.config.extra) -}}
 {{- if has $key $reserved -}}
 {{- fail (printf "config.extra.%s conflicts with a key managed by the chart; set the top-level value instead" $key) -}}

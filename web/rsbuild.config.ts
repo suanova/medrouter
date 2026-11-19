@@ -23,11 +23,22 @@ export default defineConfig(({ envMode }) => {
     isProd && trimmedBasePath ? `/${trimmedBasePath}` : ''
   const builtBase = compiledBasePath === '' ? '/' : `${compiledBasePath}/`
 
+  // Development only: the Go backend mounts the API at API_PREFIX + "/api"
+  // (default /medrouter/api). The dev server does not run the Go HTML injector,
+  // so it proxies that path and defines the override for the app. Production
+  // uses the server-injected window.__API_BASE__.
+  const devApiBase = (process.env.VITE_API_BASE ?? '/medrouter/api')
+    .trim()
+    .replaceAll(/\/+$/g, '') || '/medrouter/api'
+
   return {
     plugins: [pluginReact(), pluginTailwindcss({ optimize: false })],
     source: {
       entry: {
         index: './src/main.tsx',
+      },
+      define: {
+        __API_BASE_OVERRIDE__: JSON.stringify(devApiBase),
       },
     },
     resolve: {
@@ -45,7 +56,7 @@ export default defineConfig(({ envMode }) => {
       strictPort: false,
       base: isProd ? builtBase : '/',
       proxy: {
-        '/api': { target: serverUrl, changeOrigin: true },
+        [devApiBase]: { target: serverUrl, changeOrigin: true },
       },
     },
     output: {

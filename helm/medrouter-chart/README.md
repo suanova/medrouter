@@ -43,12 +43,11 @@ kubectl -n medrouter port-forward svc/medrouter 3000:80
 ```bash
 helm upgrade --install medrouter ./helm/medrouter-chart \
   --namespace medrouter --create-namespace \
-  --set config.BASE_PATH=/medrouter \
   --set config.PUBLIC_ORIGIN=https://www.medrouter.com \
   --set config.SESSION_COOKIE_SECURE=true
 ```
 
-站点地址为 `https://www.medrouter.com/medrouter`。
+站点地址为 `https://www.medrouter.com`。
 
 - `config.PUBLIC_ORIGIN` 只填浏览器地址的**协议 + 域名**，不带路径。注册、登录等写请求会校验 `Origin`，填错会返回 403 `CROSS_ORIGIN_REQUEST`。
 - TLS 在 Gateway/Ingress 之外终止（例如前置负载均衡器）时，chart 推导不出 `https://`，必须像上面这样显式指定。
@@ -261,8 +260,10 @@ gateway:
 OAuth 回调地址统一为：
 
 ```
-${PUBLIC_ORIGIN}${BASE_PATH}/api/oauth/<provider>/callback
+${PUBLIC_ORIGIN}${API_PREFIX}/api/oauth/<provider>/callback
 ```
+
+`config.API_PREFIX` 默认 `/medrouter`，因此默认回调为 `${PUBLIC_ORIGIN}/medrouter/api/oauth/<provider>/callback`。
 
 | 提供商 | 配置项 |
 |---|---|
@@ -360,6 +361,7 @@ helm install medrouter ./helm/medrouter-chart -n medrouter \
 | `persistence.size` | `1Gi` | SQLite PVC 容量 |
 | `persistence.retain` | `true` | SQLite PVC 卸载后保留 |
 | `config.BASE_PATH` | 空 | 子路径前缀 |
+| `config.API_PREFIX` | `/medrouter` | API 前缀；实际挂载在 `${API_PREFIX}/api`（默认 `/medrouter/api`）。`/` 表示直接使用 `/api`。设置 `BASE_PATH` 时必须在其之下 |
 | `config.PUBLIC_ORIGIN` | 自动 | 浏览器访问源；空=按 Ingress host 或 `gateway.hostnames[0]` 推导，都没有则 `localhost:<PORT>` |
 | `config.SESSION_COOKIE_SECURE` | 自动 | 空=按 `PUBLIC_ORIGIN` 是否 https 决定 |
 | `config.TRUSTED_PROXIES` | 空 | 反向代理 CIDR，逗号分隔，用于取得真实客户端 IP |

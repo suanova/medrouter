@@ -56,6 +56,7 @@ func baseConfig(t *testing.T) *config.Config {
 		SystemName:           "MedRouter",
 		Version:              "test",
 		PublicOrigin:         "http://example.test",
+		APIPrefix:            "",
 		SessionSecret:        "test-session-secret-with-enough-entropy",
 		SessionCookieName:    "medrouter_session",
 		SessionTTL:           24 * time.Hour,
@@ -130,8 +131,8 @@ func newTestApp(t *testing.T, mutate func(*config.Config)) *testApp {
 }
 
 func (a *testApp) apiPath(path string) string {
-	if a.cfg.BasePath != "" && strings.HasPrefix(path, "/api/") {
-		return a.cfg.BasePath + path
+	if strings.HasPrefix(path, "/api/") {
+		return a.cfg.APIPath() + strings.TrimPrefix(path, "/api")
 	}
 	return path
 }
@@ -575,9 +576,36 @@ func TestOAuthDisabledProviderRedirects(t *testing.T) {
 	}
 }
 
+func TestCustomAPIPrefix(t *testing.T) {
+	app := newTestApp(t, func(c *config.Config) {
+		c.BasePath = ""
+		c.APIPrefix = "/medrouter"
+	})
+
+	resp, env := app.request(http.MethodGet, "/api/status", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status status = %d", resp.StatusCode)
+	}
+	app.mustSuccess(env, "status under custom API prefix")
+
+	// The path the API used to live at is a JSON 404, never the SPA shell.
+	old, err := http.Get(app.server.URL + "/api/status")
+	if err != nil {
+		t.Fatalf("old api request: %v", err)
+	}
+	defer old.Body.Close()
+	if old.StatusCode != http.StatusNotFound {
+		t.Fatalf("old api status = %d", old.StatusCode)
+	}
+	if ct := old.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("old api content type = %q", ct)
+	}
+}
+
 func TestBasePathAPIAndOAuthRedirect(t *testing.T) {
 	app := newTestApp(t, func(c *config.Config) {
 		c.BasePath = "/medrouter"
+		c.APIPrefix = "/medrouter"
 		c.PublicOrigin = "http://example.test/medrouter"
 	})
 
