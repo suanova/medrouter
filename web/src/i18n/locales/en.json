@@ -565,5 +565,167 @@
     "footer": {
       "source": "Data source · ModelVersion · Dataset"
     }
+  },
+  "home": {
+    "hero": {
+      "kicker": "MEDICAL AI MODEL EXCHANGE",
+      "title": "Evidence first. Then the model.",
+      "lead": "The vetted marketplace for medical AI. Every model passport is machine-readable and verifiable, evaluations are bound to versions, and delivery is a multi-tenant SaaS API.",
+      "searchPlaceholder": "Search models, diseases, departments or vendors",
+      "searchButton": "Search",
+      "browse": "Browse models",
+      "access": "Request access",
+      "chipsLabel": "Popular scenes",
+      "chips": {
+        "lung": "Lung nodule screening",
+        "pathology": "Pathology",
+        "chart": "Chart QA",
+        "admet": "ADMET"
+      }
+    },
+    "trust": {
+      "models": "{{n}} models",
+      "datasets": "{{n}} datasets",
+      "evidence": "L0–L4 evidence",
+      "delivery": "API-only delivery",
+      "audit": "Auditable calls"
+    },
+    "passport": {
+      "kicker": "FEATURED PASSPORT",
+      "regulatoryUnknown": "Regulatory status not stated",
+      "evaluationPending": "MedTrust evaluation pending",
+      "api": "SaaS",
+      "download": "Download"
+    },
+    "scenes": {
+      "kicker": "SCENES",
+      "title": "Enter by problem",
+      "lead": "Hospitals and pharma arrive with a problem, not a model name.",
+      "models": "{{n}} models",
+      "bestEvidence": "Best evidence {{level}}",
+      "enter": "Enter scene",
+      "items": {
+        "lung": {
+          "title": "Lung nodule screening",
+          "description": "From CT images to structured reports, selected by evidence level."
+        },
+        "pathology": {
+          "title": "Pathology assistance",
+          "description": "WSI models, stain normalization and report structuring."
+        },
+        "chart": {
+          "title": "Chart generation & QA",
+          "description": "De-identify, measure hallucinations and isolate tenants before going live."
+        },
+        "admet": {
+          "title": "Pharma ADMET",
+          "description": "Property prediction, toxicity and scaffold-split evaluation."
+        }
+      }
+    },
+    "models": {
+      "kicker": "PASSPORT MODELS",
+      "title": "Passport models",
+      "lead": "See the evidence and the scene before the model files.",
+      "viewAll": "View all models",
+      "empty": "The model catalog is temporarily unavailable.",
+      "retry": "Retry"
+    },
+    "evaluations": {
+      "kicker": "MEDTRUST",
+      "title": "Evaluations are the product, not a footnote.",
+      "lead": "Evaluations are bound to versions; only de-identified data by default, with client-side evaluation packs.",
+      "apply": "Request joint evaluation",
+      "levels": "Three data levels: public benchmarks · hospital de-identified data · pharma proprietary data.",
+      "note": "The first lighthouse reports are being onboarded.",
+      "dimensions": {
+        "effectiveness": "Effectiveness",
+        "safety": "Safety",
+        "fairness": "Fairness",
+        "robustness": "Robustness",
+        "efficiency": "Efficiency",
+        "compliance": "Compliance",
+        "human": "Human-AI collaboration"
+      }
+    },
+    "datasets": {
+      "kicker": "TRUSTED DATA",
+      "title": "Paired trusted data",
+      "lead": "Access level, de-identification and ethics are first-class fields.",
+      "viewAll": "Browse datasets",
+      "access": {
+        "public": "Public",
+        "request": "Request",
+        "restricted": "Restricted"
+      },
+      "deidentification": {
+        "notApplicable": "De-identification n/a",
+        "declared": "De-identified",
+        "unknown": "De-identification not stated"
+      },
+      "ethics": {
+        "notApplicable": "Ethics n/a",
+        "declared": "Ethics declared",
+        "unknown": "Ethics not stated"
+      },
+      "records": "{{n}} records",
+      "unknownPublisher": "Publisher not stated"
+    },
+    "delivery": {
+      "kicker": "DELIVERY",
+      "title": "From selection to production",
+      "lead": "One path; no private deployments.",
+      "steps": {
+        "select": {
+          "title": "Select",
+          "text": "Filter by disease, department, task and evidence level; read the passport first."
+        },
+        "verify": {
+          "title": "Verify & evaluate",
+          "text": "Reports are bound to versions; public, hospital de-identified and pharma proprietary data levels."
+        },
+        "authorize": {
+          "title": "Request & authorize",
+          "text": "Public, invited, institutional or commercial access with a data-use agreement."
+        },
+        "integrate": {
+          "title": "Integrate via API",
+          "text": "Multi-tenant routing, version pinning and call audit; no private deployment."
+        }
+      },
+      "disclaimer": "The platform does not diagnose, issue regulatory certificates, or replace clinician or company responsibility. Raw patient data is not accepted by default."
+    },
+    "orgs": {
+      "kicker": "ECOSYSTEM",
+      "title": "Partner institutions and experts",
+      "text": "We are onboarding partner hospitals, pharma companies and an expert review board. Every endorsement must declare conflicts of interest.",
+      "contact": "Contact us"
+    },
+    "cta": {
+      "kicker": "GET STARTED",
+      "hospital": {
+        "title": "Hospitals & pharma",
+        "text": "Book a walkthrough to assess scenes and compliance.",
+        "button": "Request access"
+      },
+      "vendor": {
+        "title": "Model vendors",
+        "text": "Submit passport fields and enter verification and evaluation.",
+        "button": "List a model"
+      }
+    },
+    "footer": {
+      "tagline": "The vetted marketplace, evaluation center and delivery network for medical AI.",
+      "linksLabel": "Footer navigation",
+      "links": {
+        "models": "Models",
+        "datasets": "Datasets",
+        "evaluations": "Evaluations",
+        "scenes": "Scenes",
+        "privacy": "Privacy policy",
+        "terms": "Terms of service"
+      },
+      "source": "Source · CubeStack ModelVersion / Dataset"
+    }
   }
 }
