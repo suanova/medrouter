@@ -74,13 +74,13 @@ datasetLibrary:
   requestTimeoutSeconds: 5
 
 # ---------------------------------------------------------------------------
-# Dataset files (S3)
+# Dataset and model files (S3)
 #
-# The dataset "Files" tab lists object keys and signs short-lived download
-# URLs; dataset bytes never pass through MedRouter. Each Dataset CR declares
-# its own s3://bucket/prefix in spec.storage.s3.uri, so this block only carries
-# the endpoint and a read-only credential. Browsing is public; downloads
-# require a signed-in user.
+# The dataset and model "Files" tabs list object keys and sign short-lived
+# download URLs; bytes never pass through MedRouter. Each Dataset or
+# ModelVersion CR declares its own s3://bucket/prefix, so this block only
+# carries the endpoint and a read-only credential. Browsing is public;
+# downloads require a signed-in user.
 # ---------------------------------------------------------------------------
 datasetFiles:
   enabled: false

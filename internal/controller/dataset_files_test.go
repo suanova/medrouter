@@ -66,7 +66,7 @@ func filesRouter(source kube.Source, store service.ObjectStore) (*gin.Engine, *s
 		S3Timeout:              time.Second,
 	}
 	catalog := service.NewDatasetCatalog(cfg, source)
-	controller := NewDatasetController(catalog, service.NewDatasetFilesService(cfg, catalog, store))
+	controller := NewDatasetController(catalog, service.NewFilesService(cfg, catalog, store))
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/datasets/:name/files", controller.Files)

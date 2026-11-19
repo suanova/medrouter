@@ -13,10 +13,10 @@ import (
 
 type DatasetController struct {
 	catalog *service.DatasetCatalog
-	files   *service.DatasetFilesService
+	files   *service.FilesService
 }
 
-func NewDatasetController(catalog *service.DatasetCatalog, files *service.DatasetFilesService) *DatasetController {
+func NewDatasetController(catalog *service.DatasetCatalog, files *service.FilesService) *DatasetController {
 	return &DatasetController{catalog: catalog, files: files}
 }
 
@@ -43,15 +43,15 @@ func (h *DatasetController) Get(c *gin.Context) {
 // download (Download) is the authenticated action.
 func (h *DatasetController) Files(c *gin.Context) {
 	if h.files == nil {
-		common.Success(c, &service.DatasetFiles{
-			DatasetFilesStatus: service.DatasetFilesStatus{
+		common.Success(c, &service.FileListing{
+			FilesStatus: service.FilesStatus{
 				Available:   false,
 				Reason:      service.FilesDisabled,
-				Message:     "Dataset file browsing is disabled for this deployment.",
+				Message:     "File browsing is disabled for this deployment.",
 				Retryable:   false,
 				GeneratedAt: time.Now().UTC(),
 			},
-			Entries: []service.DatasetFileEntry{},
+			Entries: []service.FileEntry{},
 		})
 		return
 	}

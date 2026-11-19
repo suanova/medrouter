@@ -13,6 +13,7 @@ import { DetailHeader } from './detail-header'
 import { DetailTabs, type DetailTab } from './detail-tabs'
 import { DetailLoading } from './loading-states'
 import { ModelInfoCard } from './model-info-card'
+import { ModelFilesPanel } from './model-files-panel'
 import { OverviewPanel } from './overview-panel'
 import { RuntimeProfileList } from './runtime-profile-list'
 import { UnavailableState } from './unavailable-state'
@@ -159,6 +160,8 @@ export function ModelDetailPage() {
                     />
                   </section>
                 ) : null}
+
+                {activeTab === 'files' ? <ModelFilesPanel detail={data} /> : null}
 
                 <aside className='ml-detail-side'>
                   <ModelInfoCard detail={data} />

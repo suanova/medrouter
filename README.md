@@ -11,7 +11,7 @@ MedRouter 是一个面向 AI 模型的托管与分享平台（目标类似 Huggi
 - 完整账号界面（登录、注册、OAuth、仪表盘）与中英双语、亮/暗主题
 - 模型库列表 `/models` 与详情 `/models/$name`：直接读取 CubeStack `ModelVersion` / `InferenceRuntimeProfile`，展示模型卡、存储摘要、兼容运行时与全部版本；集群不可用时优雅降级
 - 数据集库列表 `/datasets` 与详情 `/datasets/$name`：读取 CubeStack `Dataset`，按语义名合并版本，展示格式、体积、记录数、版本与访问/去标识化/伦理等边界信息；与模型库独立降级
-- 数据集文件浏览（配置 S3 后启用）：在数据集详情「文件」页读取 `Dataset.spec.storage.s3.uri`，按目录分页浏览；浏览公开，下载需登录并由后端签发短期预签名 URL
+- 数据集 / 模型文件浏览（配置 S3 后启用）：在详情页「文件」tab 读取 `Dataset.spec.storage.s3.uri` 或 `ModelVersion.spec.storage.s3.uri`，按目录分页浏览；浏览公开，下载需登录并由后端签发短期预签名 URL
 - 工作室 `/studio`：模型与数据集目录的入口页，展示两个目录的最近更新与接入状态；运行态、配额与审计尚未接入，页面明确标注而不展示估算数值
 - 首页内容暂留空，仅保留站点导航
 - 生产模式由 Go 二进制内嵌前端静态资源，并支持部署在子路径（`BASE_PATH`）
@@ -277,11 +277,12 @@ curl -s localhost:3000/api/datasets | jq '.data.available, .data.total'
 
 Helm Chart 为数据集库单独创建只读 ClusterRole/ClusterRoleBinding，仅授予 `datasets` 的 `list` 权限（`datasetLibrary.*`，与模型库互不影响）。
 
-## 数据集文件浏览（S3）
+## 数据集与模型文件浏览（S3）
 
-数据集内容不经过 MedRouter：详情页新增「文件」tab，读取该 `Dataset` 版本 `spec.storage.s3.uri`（`s3://bucket/prefix`），按 `delimiter=/` 逐层列出目录；下载由后端调用 `HeadObject` 校验后签发短期预签名 URL，凭据只存在于服务端。
+内容不经过 MedRouter：数据集详情和模型详情都新增「文件」tab，分别读取该版本的 `spec.storage.s3.uri`（`s3://bucket/prefix`），按 `delimiter=/` 逐层列出目录；下载由后端调用 `HeadObject` 校验后签发短期预签名 URL，凭据只存在于服务端。
 
 - 只对 `storage.strategy: S3` 且声明了非空 `s3.uri` 的版本可浏览；`HostPath` / PVC / 缺少 URI 的版本显示明确原因，不猜测路径。
+- 模型侧注意：带 `podTemplate.mounts` 的 profile 与 S3 `ModelVersion` 配对会被 controller 判为 `ModelStorageIncompatible`；要用 S3 存储，需要不带 mounts 的 S3 profile 变体（参考 `model-collection/bundles/metax-vllm-qwen3.8-27b-s3`）。
 - 浏览公开；下载接口位于登录态路由，未登录返回 401 `UNAUTHENTICATED`。
 - 用户只能看到相对版本根目录的路径，bucket、完整 URI、端点与凭据名不会下发；`prefix` / `path` 拒绝绝对路径、`..`、反斜杠与控制字符。
 - 目录列表按 `(bucket, prefix, cursor, limit)` 缓存 20 秒并用 singleflight 合并并发请求；单页默认 200、上限 1000。
@@ -358,6 +359,8 @@ datasetFiles:
 | `GET` | `/api/oauth/:provider/callback` | OAuth 回调 |
 | `GET` | `/api/models` | 模型库列表（公开；集群异常时 200 + `available:false`） |
 | `GET` | `/api/models/:name` | 模型详情（`spec.model` 或 `ModelVersion.metadata.name`；不存在 404） |
+| `GET` | `/api/models/:name/files` | 模型目录列表（公开；`ref`、`prefix`、`cursor`、`limit`；不可用时 200 + `available:false`） |
+| `GET` | `/api/models/:name/files/download` | 签发某个模型文件的预签名 URL（需登录；`ref`、`path`） |
 | `GET` | `/api/datasets` | 数据集库列表（公开；集群异常时 200 + `available:false`） |
 | `GET` | `/api/datasets/:name` | 数据集详情（`spec.dataset` 或 `Dataset.metadata.name`；不存在 404 `DATASET_NOT_FOUND`） |
 | `GET` | `/api/datasets/:name/files` | 数据集目录列表（公开；`ref`、`prefix`、`cursor`、`limit`；不可用时 200 + `available:false`） |
@@ -374,6 +377,7 @@ make check      # go vet + tsc + tests
 - 模型目录测试覆盖版本分组与自然排序、注解回退、兼容规则、存储脱敏、TTL/负缓存/stale 降级与 CRD 错误分类。
 - 数据集目录测试覆盖语义分组、版本排序、注解回退、存储脱敏，以及独立缓存与降级路径。
 - 数据集文件浏览测试覆盖 S3 列表投影、相对路径与越权校验、错误分类、预签名下载与未登录 401。
+- 模型文件浏览复用同一套 `FileService`，测试覆盖模型版本解析、HostPath 不支持、预签名下载与未登录 401。
 - 前端测试覆盖安全跳转、表单校验规则、品牌组件，以及模型/数据集的筛选、排序与搜索参数解析。
 - PostgreSQL 可通过 `SQL_DSN=postgres://... go run .` 手动验证；自动化测试目前只使用 SQLite。
 
