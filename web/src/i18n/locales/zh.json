@@ -63,7 +63,7 @@
   "Global Users": "全球用户",
   "Guest": "访客",
   "Intelligently select the best model and channel with load balancing and failover for stable, efficient service.": "智能选择最优模型和渠道，支持负载均衡、故障转移，确保服务稳定高效。",
-  "Join MedRouter to publish and discover models": "加入 MedRouter，发布和发现模型",
+  "Join MedRouter to publish and discover models": "创建账号以浏览模型和数据集",
   "Joined": "加入时间",
   "Legal": "法律",
   "Light": "浅色",
@@ -148,7 +148,7 @@
   "models": {
     "kicker": "MODEL HUB · 开放模型目录",
     "title": "模型库",
-    "lead": "浏览发布到当前 MedRouter 集群的模型。每个条目都对应一个 CubeStack ModelVersion，兼容性由集群中已安装的推理运行时配置计算得出。",
+    "lead": "浏览当前部署中可用的模型，查看版本信息以及匹配的运行时配置。",
     "refresh": "刷新",
     "refreshing": "刷新中…",
     "headNotes": {
@@ -158,10 +158,10 @@
     },
     "results": "{{total}} 个模型中匹配 {{count}} 个",
     "resultsAll": "{{count}} 个模型",
-    "fallbackDescription": "{{architecture}} 架构 · {{quantization}} · {{count}} 个版本。该模型未提供简介注解。",
+    "fallbackDescription": "{{architecture}} 架构 · {{quantization}} · {{count}} 个版本。暂无模型简介。",
     "notice": {
-      "label": "数据来源",
-      "text": "目录数据直接读取自集群中的 ModelVersion 与 InferenceRuntimeProfile 资源。简介、发布者、许可证与使用边界来自资源注解；使用前请核对原始模型仓库与许可条款。"
+      "label": "目录说明",
+      "text": "模型和运行时信息来自当前部署的目录。简介、发布者、许可证与使用说明由各条目提供；使用前请查看链接的来源页面。"
     },
     "spotlight": {
       "aria": "精选模型",
@@ -210,11 +210,11 @@
       "title": "没有匹配的模型",
       "text": "试试放宽搜索关键词，或清空部分筛选条件。",
       "catalogTitle": "暂无模型",
-      "catalogText": "当前集群中没有找到 ModelVersion 资源。"
+      "catalogText": "目录中还没有添加模型。"
     },
     "gridNote": "只有运行时配置同时列出模型的架构与量化时，才视为兼容。",
     "footer": {
-      "source": "数据来源 · ModelVersion + InferenceRuntimeProfile"
+      "source": "目录内容 · 模型与运行时"
     },
     "detail": {
       "allModels": "模型库",
@@ -316,20 +316,20 @@
       "emptyRuntimeTitle": "没有兼容的运行时配置",
       "emptyRuntimeText": "运行时配置必须同时列出该模型的架构与量化；空列表不会被视为通配。",
       "emptyVersionsTitle": "暂无版本",
-      "emptyVersionsText": "该模型没有 ModelVersion 资源。",
+      "emptyVersionsText": "该模型暂时没有可用版本。",
       "emptyUsedByTitle": "当前未被使用",
       "emptyUsedByText": "没有推理服务在 status.usedBy 中引用该模型。",
       "unavailable": {
         "kicker": "模型库不可用",
         "title": "暂时无法加载模型目录。",
         "retry": "重试",
-        "disabled": "当前部署已关闭模型库功能。",
-        "noCluster": "MedRouter 无法访问 Kubernetes API。请部署在集群内，或配置 MODEL_LIBRARY_API_URL。",
-        "crdMissing": "当前集群未安装 CubeStack CRD。",
-        "forbidden": "MedRouter 无权列出 CubeStack 资源。请检查 ServiceAccount 的 RBAC。",
-        "unauthorized": "Kubernetes API 拒绝了 ServiceAccount 凭证。",
-        "timeout": "Kubernetes API 响应超时。",
-        "apiError": "模型库无法读取 CubeStack 资源。"
+        "disabled": "模型目录暂时不可用。",
+        "noCluster": "模型目录暂时不可用，请联系站点管理员。",
+        "crdMissing": "当前部署尚未配置模型目录。",
+        "forbidden": "模型目录暂时不可用，请联系站点管理员。",
+        "unauthorized": "模型目录暂时不可用，请联系站点管理员。",
+        "timeout": "模型目录响应超时，请稍后重试。",
+        "apiError": "暂时无法加载模型目录，请稍后重试。"
       },
       "notFound": {
         "title": "模型不存在",
@@ -341,7 +341,7 @@
   "datasets": {
     "kicker": "DATA HUB · 数据集",
     "title": "数据集",
-    "lead": "发布到当前 MedRouter 集群、经过去标识化核查与许可标注的语料。先看字段、规模与访问条件，再决定是否申请拉取。",
+    "lead": "浏览当前部署中的数据集。使用前可以先查看格式、规模、来源和访问条件。",
     "refresh": "刷新",
     "refreshing": "刷新中…",
     "headNotes": {
@@ -354,8 +354,8 @@
     "fallbackDescription": "{{format}} 数据集 · {{count}} 个版本 · {{rows}} 条记录。该数据集未提供简介注解。",
     "fallbackDescriptionNoRows": "{{format}} 数据集 · {{count}} 个版本。该数据集未提供简介注解。",
     "notice": {
-      "label": "数据来源",
-      "text": "数据集条目直接读取自集群中的 CubeStack Dataset 资源。简介、发布者、许可证与治理字段来自资源注解；使用前请核对来源仓库与许可条款。"
+      "label": "目录说明",
+      "text": "数据集信息来自当前部署的目录。简介、发布者、许可证与访问说明由各条目提供；使用前请查看来源和许可条款。"
     },
     "search": {
       "placeholder": "搜索数据集、发布者或标签",
@@ -383,11 +383,11 @@
       "title": "没有匹配的数据集",
       "text": "试试放宽搜索关键词，或清空任务筛选。",
       "catalogTitle": "暂无数据集",
-      "catalogText": "当前集群中没有找到 Dataset 资源。"
+      "catalogText": "目录中还没有添加数据集。"
     },
-    "gridNote": "格式、体积与记录数来自 Dataset 的 spec；缺失字段显示为未知，不做推断。",
+    "gridNote": "格式、体积和记录数会在有信息时显示；缺失项不会猜测补全。",
     "footer": {
-      "source": "数据来源 · Dataset"
+      "source": "目录内容 · 数据集"
     },
     "detail": {
       "allDatasets": "数据集",
@@ -459,18 +459,18 @@
       "warning": "提示",
       "stale": "当前展示的是 {{time}} 的缓存数据。",
       "emptyVersionsTitle": "暂无版本",
-      "emptyVersionsText": "该数据集没有 Dataset 资源。",
+      "emptyVersionsText": "该数据集暂时没有可用版本。",
       "unavailable": {
         "kicker": "数据集库不可用",
         "title": "暂时无法加载数据集目录。",
         "retry": "重试",
-        "disabled": "当前部署已关闭数据集库功能。",
-        "noCluster": "MedRouter 无法访问 Kubernetes API。请部署在集群内，或配置 DATASET_LIBRARY_API_URL。",
-        "crdMissing": "当前集群未安装 CubeStack Dataset CRD。",
-        "forbidden": "MedRouter 无权列出 CubeStack 数据集。请检查 ServiceAccount 的 RBAC。",
-        "unauthorized": "Kubernetes API 拒绝了 ServiceAccount 凭证。",
-        "timeout": "Kubernetes API 响应超时。",
-        "apiError": "数据集库无法读取 CubeStack 资源。"
+        "disabled": "数据集目录暂时不可用。",
+        "noCluster": "数据集目录暂时不可用，请联系站点管理员。",
+        "crdMissing": "当前部署尚未配置数据集目录。",
+        "forbidden": "数据集目录暂时不可用，请联系站点管理员。",
+        "unauthorized": "数据集目录暂时不可用，请联系站点管理员。",
+        "timeout": "数据集目录响应超时，请稍后重试。",
+        "apiError": "暂时无法加载数据集目录，请稍后重试。"
       },
       "notFound": {
         "title": "数据集不存在",
@@ -482,7 +482,7 @@
   "studio": {
     "kicker": "STUDIO · 工作室",
     "title": "工作室",
-    "lead": "从模型或数据集入手，确认集群能运行什么，再走下一步。下面的目录实时读取；运行态、配额与工作区面板已预留位置，但尚未接入。",
+    "lead": "浏览模型和数据集目录，了解当前部署中有哪些内容。运行状态、配额和工作区信息目前还无法查看。",
     "headNotes": {
       "models": "{{count}} 个模型",
       "datasets": "{{count}} 个数据集",
@@ -496,7 +496,7 @@
       "kicker": "RUNTIME · 推理服务",
       "title": "运行态尚未接入",
       "status": "未接入",
-      "text": "MedRouter 目前从 CubeStack 读取模型与数据集目录。推理实例、开发环境、GPU 配额与审计日志同样位于 CubeStack，但还没有只读接口，因此这里不展示运行时长、显存或吞吐等数字。",
+      "text": "这里可以查看模型和数据集目录。运行状态、开发环境、GPU 配额和审计日志尚未接入，因此暂时没有实时使用数据。",
       "fields": {
         "inference": "推理实例",
         "workspace": "开发环境",
@@ -539,7 +539,7 @@
       },
       "datasets": {
         "title": "数据集库",
-        "text": "按任务筛选，查看格式、体积与治理字段，再申请副本。",
+        "text": "可按公开、申请或受控等访问条件筛选；去标识化与伦理信息以数据集条目说明为准。",
         "cta": "打开数据集库",
         "meta": "{{count}} 个数据集"
       },
@@ -552,19 +552,115 @@
       "unavailable": "目录不可用"
     },
     "footer": {
-      "source": "数据来源 · ModelVersion · Dataset"
+      "source": "目录内容 · 模型 · 数据集"
     }
   },
   "home": {
     "hero": {
-      "kicker": "MEDICAL AI MODEL EXCHANGE",
-      "title": "先看证据，再选模型。",
-      "lead": "面向医院与药企的医疗医药 AI 准入货架。每份模型护照可机读、可核验；评测与版本绑定；通过统一 SaaS API 接入业务系统。",
+      "kicker": "医疗 AI 模型目录",
+      "titlePrefix": "医疗模型怎么选？",
+      "titleMark": "先从应用场景开始。",
+      "subtitle": "按科室、模态或任务浏览模型，再查看版本、来源与使用条件。",
+      "primaryAction": "免费开始调用",
+      "secondaryAction": "浏览模型库",
+      "preview": {
+        "label": "模型目录筛选示意",
+        "badge": "目录示意",
+        "requestLabel": "筛选条件",
+        "request": "查找肺部影像相关模型",
+        "modality": "影像",
+        "department": "呼吸科",
+        "scenarioLabel": "切换示例场景",
+        "scenarios": {
+          "imaging": "影像",
+          "records": "病历文本",
+          "drug": "药物",
+          "genomics": "基因组"
+        },
+        "steps": {
+          "parse": "解析 · 请求理解",
+          "candidates": "候选 · 能力匹配",
+          "select": "选择 · 示例路由"
+        },
+        "outputLabel": "回复 · 示例",
+        "samples": {
+          "imaging": {
+            "request": "胸片见右下肺实变，请分析。",
+            "modality": "影像",
+            "department": "呼吸科",
+            "parse": "影像诊断 · 呼吸科 · 胸片",
+            "candidate1Name": "lavamed-7b",
+            "candidate1Meta": "影像 · L0",
+            "candidate2Name": "biomistral-7b",
+            "candidate2Meta": "文本 · L2",
+            "candidate3Name": "openmed-ner",
+            "candidate3Meta": "实体识别 · L1",
+            "selectedModel": "lavamed-7b",
+            "reason": "唯一匹配影像模态；L0 证据，按研究用途处理。",
+            "output": "右下肺见实变影，边界模糊；请结合临床表现进一步判断。",
+            "evidence": "研究级 · L0",
+            "review": "需专业人员复核"
+          },
+          "records": {
+            "request": "从出院记录中整理用药、剂量和不良反应，并标出不确定项。",
+            "modality": "病历文本",
+            "department": "心血管科",
+            "parse": "信息抽取 · 心血管科 · EMR 文本",
+            "candidate1Name": "openmed-ner",
+            "candidate1Meta": "实体识别 · L1",
+            "candidate2Name": "openmed-ner-distilbert",
+            "candidate2Meta": "轻量 · L1",
+            "candidate3Name": "biomedbert",
+            "candidate3Meta": "分类 · L1",
+            "selectedModel": "openmed-ner",
+            "reason": "实体类型覆盖较全；剂量等字段仍需人工核对。",
+            "output": "识别出药品、剂量和不良反应等实体；不确定项需对照原始记录。",
+            "evidence": "证据等级 · L1",
+            "review": "需人工核对"
+          },
+          "drug": {
+            "request": "查找适用于小分子活性筛选和 ADMET 预测的模型。",
+            "modality": "药物分子",
+            "department": "药学",
+            "parse": "虚拟筛选 · 药学 · 分子结构",
+            "candidate1Name": "deepchem",
+            "candidate1Meta": "筛选 · L1",
+            "candidate2Name": "molformer",
+            "candidate2Meta": "分子表征 · L1",
+            "candidate3Name": "biomistral-7b",
+            "candidate3Meta": "文本 · L2",
+            "selectedModel": "deepchem",
+            "reason": "目录中有小分子筛选相关条目；预测结果需要实验验证。",
+            "output": "可查看模型用途、版本和许可信息；目录不提供化合物筛选结论。",
+            "evidence": "证据等级 · L1",
+            "review": "需实验验证"
+          },
+          "genomics": {
+            "request": "查找用于蛋白序列或变异分析的基因组学模型。",
+            "modality": "蛋白序列",
+            "department": "基因组学",
+            "parse": "序列建模 · 基因组学 · 蛋白序列",
+            "candidate1Name": "openfold3",
+            "candidate1Meta": "结构预测 · L3",
+            "candidate2Name": "esm2",
+            "candidate2Meta": "序列 · L1",
+            "candidate3Name": "scgpt",
+            "candidate3Meta": "单细胞 · L3",
+            "selectedModel": "openfold3",
+            "reason": "条目覆盖蛋白结构预测；许可和适用范围需另行确认。",
+            "output": "可在目录查看模型版本、证据字段及其来源说明。",
+            "evidence": "证据等级 · L3",
+            "review": "不替代遗传咨询"
+          }
+        },
+        "footnote": "示意请求与输出 · 不构成诊断建议"
+      },
+      "lead": "浏览模型和数据集，查看条目提供的信息与访问条件，再决定下一步。",
       "searchPlaceholder": "搜索模型、疾病、科室或厂商",
       "searchButton": "搜索",
-      "browse": "浏览模型广场",
-      "access": "申请接入",
-      "chipsLabel": "热门场景",
+      "browse": "浏览模型",
+      "access": "创建账号",
+      "chipsLabel": "按应用场景浏览",
       "chips": {
         "lung": "肺结节筛查",
         "pathology": "病理辅助诊断",
@@ -575,58 +671,58 @@
     "trust": {
       "models": "{{n}} 个模型",
       "datasets": "{{n}} 个数据集",
-      "evidence": "L0–L4 证据分级",
-      "delivery": "API-only 交付",
-      "audit": "调用可审计"
+      "evidence": "条目提供的证据信息",
+      "delivery": "模型与数据集目录",
+      "audit": "查看版本与使用条件"
     },
     "passport": {
-      "kicker": "精选模型护照",
-      "regulatoryUnknown": "监管状态未声明",
-      "evaluationPending": "MedTrust 评测待接入",
-      "api": "SaaS",
-      "download": "下载"
+      "kicker": "精选模型",
+      "regulatoryUnknown": "未提供监管状态",
+      "evaluationPending": "暂未提供评测信息",
+      "api": "标注为 API",
+      "download": "标注为下载"
     },
     "scenes": {
       "kicker": "SCENES",
-      "title": "按问题进入",
-      "lead": "医院和药企带着问题来，不带着模型名来。",
+      "title": "按应用场景浏览",
+      "lead": "应用场景可以帮助缩小范围，具体模型信息请以各条目为准。",
       "models": "{{n}} 个模型",
-      "bestEvidence": "最高证据 {{level}}",
+      "bestEvidence": "已标注最高证据等级 {{level}}",
       "enter": "进入场景",
       "items": {
         "lung": {
           "title": "肺结节筛查",
-          "description": "从 CT 影像到结构化报告，按证据等级选型。"
+          "description": "浏览相关影像与呼吸科模型条目。"
         },
         "pathology": {
           "title": "病理辅助诊断",
-          "description": "WSI 模型、染色归一化与报告结构化。"
+          "description": "浏览病理相关模型条目及其模态信息。"
         },
         "chart": {
           "title": "病历生成与质控",
-          "description": "脱敏、幻觉评测、租户隔离后再上线。"
+          "description": "浏览病历文本相关模型条目。"
         },
         "admet": {
           "title": "药企 ADMET",
-          "description": "性质预测、毒性与 scaffold split 评测。"
+          "description": "浏览药物 ADMET 相关模型条目。"
         }
       }
     },
     "models": {
-      "kicker": "PASSPORT MODELS",
-      "title": "精选护照模型",
-      "lead": "先看证据与场景，再看模型文件。",
+      "kicker": "精选模型",
+      "title": "浏览医疗 AI 模型",
+      "lead": "模型条目会展示目录中已有的信息。使用前请查看来源、许可和适用范围。",
       "viewAll": "查看全部模型",
       "empty": "模型目录暂不可用。",
       "retry": "重试"
     },
     "evaluations": {
-      "kicker": "MEDTRUST",
-      "title": "评测是商品，不是附属标签。",
-      "lead": "评测与模型版本绑定；默认只接收脱敏数据，支持客户侧评测包。",
-      "apply": "申请联合评测",
-      "levels": "评测数据三级：公开基准 · 医院脱敏数据 · 药企专有数据。",
-      "note": "首批灯塔评测报告接入中。",
+      "kicker": "MEDICAL AI EVALUATION",
+      "title": "医疗 AI 评测",
+      "lead": "可以查看目录中的模型和运行时信息。评测报告功能尚未上线。",
+      "apply": "创建账号",
+      "levels": "评测方法和报告功能仍在开发中。",
+      "note": "后续如有评测信息，会在这里更新。",
       "dimensions": {
         "effectiveness": "有效性",
         "safety": "安全性",
@@ -638,9 +734,9 @@
       }
     },
     "datasets": {
-      "kicker": "TRUSTED DATA",
-      "title": "配套可信数据",
-      "lead": "访问级别、去标识与伦理状态，同样是一等公民。",
+      "kicker": "数据集",
+      "title": "医疗数据集",
+      "lead": "查看数据集的访问条件，以及已提供的去标识化和伦理信息。",
       "viewAll": "浏览数据集",
       "access": {
         "public": "公开",
@@ -661,50 +757,50 @@
       "unknownPublisher": "未声明发布者"
     },
     "delivery": {
-      "kicker": "DELIVERY",
-      "title": "从选型到上线",
-      "lead": "一条路径，不交付私有化。",
+      "kicker": "使用说明",
+      "title": "使用目录前，先核对这些信息",
+      "lead": "目录帮助你发现条目；是否适用，还需要结合来源、许可和具体场景判断。",
       "steps": {
         "select": {
-          "title": "选型",
-          "text": "按疾病、科室、任务与证据等级筛选，先看护照。"
+          "title": "按场景筛选",
+          "text": "从疾病、科室或任务入口浏览相关模型。"
         },
         "verify": {
-          "title": "核验与评测",
-          "text": "报告与版本绑定；公开基准、医院脱敏数据、药企专有数据三级。"
+          "title": "查看条目详情",
+          "text": "核对版本、简介、发布者及目录中已有的证据信息。"
         },
         "authorize": {
-          "title": "申请与授权",
-          "text": "公开 / 受邀 / 机构内 / 商业分级授权，签署数据使用协议。"
+          "title": "核对来源与许可",
+          "text": "查看数据集的来源和访问条件；缺少的信息请向发布者确认。"
         },
         "integrate": {
-          "title": "API 接入",
-          "text": "多租户、路由、版本锁定与调用审计；不交付私有化。"
+          "title": "谨慎评估用途",
+          "text": "目录信息仅供参考，请根据自身需求与专业要求作出判断。"
         }
       },
-      "disclaimer": "平台不做诊断、不发监管证书、不替代医师或药企的责任；默认不接收原始患者数据。"
+      "disclaimer": "目录内容不构成医疗建议，也不能替代专业人员的判断。"
     },
     "orgs": {
       "kicker": "ECOSYSTEM",
       "title": "共建机构与专家",
-      "text": "合作医院、药企与专家评审团招募中。署名背书必须声明利益冲突。",
+      "text": "欢迎医院、药企和专家联系我们交流合作。",
       "contact": "联系我们"
     },
     "cta": {
-      "kicker": "GET STARTED",
+      "kicker": "开始浏览",
       "hospital": {
-        "title": "医院 / 药企",
-        "text": "预约演示，评估场景与合规要求。",
-        "button": "申请接入"
+        "title": "按场景找模型",
+        "text": "查看模型版本、证据和使用边界等已提供的信息。",
+        "button": "浏览模型"
       },
       "vendor": {
-        "title": "模型厂商",
-        "text": "提交护照字段，进入核验与评测流程。",
-        "button": "上架模型"
+        "title": "查找数据集",
+        "text": "查看数据格式、来源及已提供的访问和伦理信息。",
+        "button": "浏览数据集"
       }
     },
     "footer": {
-      "tagline": "医疗医药 AI 的准入货架、体检中心与配送网络。",
+      "tagline": "浏览医疗 AI 模型与数据集，了解版本、使用条件和来源信息。",
       "linksLabel": "页脚导航",
       "links": {
         "models": "模型广场",
@@ -714,7 +810,7 @@
         "privacy": "隐私政策",
         "terms": "用户协议"
       },
-      "source": "数据来源 · CubeStack ModelVersion / Dataset"
+      "source": "模型与数据集目录"
     }
   }
 }

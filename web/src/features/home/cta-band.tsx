@@ -11,7 +11,7 @@ export function CtaBand() {
           <p className='hm-kicker'>{t('home.cta.kicker')}</p>
           <h2>{t('home.cta.hospital.title')}</h2>
           <p>{t('home.cta.hospital.text')}</p>
-          <Link to='/sign-up' className='hm-btn hm-btn-on-dark'>
+          <Link to='/models' className='hm-btn hm-btn-on-dark'>
             {t('home.cta.hospital.button')}
           </Link>
         </div>
@@ -19,7 +19,7 @@ export function CtaBand() {
           <p className='hm-kicker'>{t('home.cta.kicker')}</p>
           <h2>{t('home.cta.vendor.title')}</h2>
           <p>{t('home.cta.vendor.text')}</p>
-          <Link to='/sign-up' className='hm-btn hm-btn-secondary'>
+          <Link to='/datasets' className='hm-btn hm-btn-secondary'>
             {t('home.cta.vendor.button')}
           </Link>
         </div>

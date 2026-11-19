@@ -4,6 +4,7 @@ import type { ModelSummary } from './types'
 import {
   activeFilterCount,
   buildFacets,
+  FACET_KEYS,
   filterModels,
   matchesKeywords,
   sortModels,
@@ -136,6 +137,26 @@ describe('facets', () => {
     ])
     expect(facets.department).toEqual([])
     expect(facets.license[0]).toEqual({ value: 'Apache-2.0', count: 2 })
+  })
+
+  it('places evidence directly under department', () => {
+    expect(FACET_KEYS.slice(0, 2)).toEqual(['department', 'evidence'])
+  })
+
+  it('orders evidence from L4 down to L0, not by count', () => {
+    const set = [
+      model({ evidence: 'L1' }),
+      model({ evidence: 'L1' }),
+      model({ evidence: 'L3' }),
+      model({ evidence: 'L0' }),
+      model({ evidence: 'L2' }),
+    ]
+    expect(buildFacets(set).evidence.map((facet) => facet.value)).toEqual([
+      'L3',
+      'L2',
+      'L1',
+      'L0',
+    ])
   })
 
   it('counts every selected value plus search', () => {

@@ -19,9 +19,9 @@ export interface ModelFilterState {
 // usage boundary stay on the detail page instead of cluttering the sidebar.
 export const FACET_KEYS = [
   'department',
+  'evidence',
   'modality',
   'task',
-  'evidence',
   'license',
 ] as const
 
@@ -143,6 +143,13 @@ export function sortModels(
   }
 }
 
+// evidenceRank orders the evidence facet from the strongest level (L4) down to
+// L0, independent of how many models claim each level.
+function evidenceRank(value: string): number {
+  const match = /^L(\d+)$/i.exec(value.trim())
+  return match ? Number(match[1]) : -1
+}
+
 export function buildFacets(models: ModelSummary[]): Facets {
   const facets: Facets = Object.fromEntries(
     FACET_KEYS.map((key) => [key, [] as FacetValue[]])
@@ -155,11 +162,15 @@ export function buildFacets(models: ModelSummary[]): Facets {
         counts.set(value, (counts.get(value) ?? 0) + 1)
       }
     }
-    facets[key] = [...counts.entries()]
-      .map(([value, count]) => ({ value, count }))
-      .sort(
-        (a, b) => b.count - a.count || a.value.localeCompare(b.value)
-      )
+    const values = [...counts.entries()].map(([value, count]) => ({ value, count }))
+    facets[key] =
+      key === 'evidence'
+        ? values.sort(
+            (a, b) =>
+              evidenceRank(b.value) - evidenceRank(a.value) ||
+              a.value.localeCompare(b.value)
+          )
+        : values.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
   }
   return facets
 }
