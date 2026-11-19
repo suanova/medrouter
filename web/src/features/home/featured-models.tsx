@@ -75,7 +75,6 @@ export function FeaturedModels({ models, loading, error, onRetry }: FeaturedMode
                       {model.evidence}
                     </span>
                   ) : null}
-                  <span className='hm-badge'>{t('home.passport.regulatoryUnknown')}</span>
                   <span
                     className={
                       deliveryMode(model.distributions) === 'api'
@@ -97,7 +96,6 @@ export function FeaturedModels({ models, loading, error, onRetry }: FeaturedMode
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
-                <p className='hm-model-eval'>{t('home.passport.evaluationPending')}</p>
                 <div className='hm-model-foot'>
                   <span>{model.publisher || t('models.cards.unknownPublisher')}</span>
                   <span>{t('models.cards.versions', { count: model.version_count })}</span>

@@ -63,7 +63,7 @@
   "Global Users": "Global Users",
   "Guest": "Guest",
   "Intelligently select the best model and channel with load balancing and failover for stable, efficient service.": "Intelligently select the best model and channel with load balancing and failover for stable, efficient service.",
-  "Join MedRouter to publish and discover models": "Join MedRouter to publish and discover models",
+  "Join MedRouter to publish and discover models": "Create an account to browse models and datasets",
   "Joined": "Joined",
   "Legal": "Legal",
   "Light": "Light",
@@ -148,7 +148,7 @@
   "models": {
     "kicker": "MODEL HUB · OPEN CATALOG",
     "title": "Model library",
-    "lead": "Discover models published to this MedRouter cluster. Every entry is backed by a CubeStack ModelVersion, with compatibility computed from installed inference runtime profiles.",
+    "lead": "Browse the models available in this deployment. Each listing includes version details and the runtime profiles it matches.",
     "refresh": "Refresh",
     "refreshing": "Refreshing…",
     "headNotes": {
@@ -158,10 +158,10 @@
     },
     "results": "{{count}} of {{total}} models",
     "resultsAll": "{{count}} models",
-    "fallbackDescription": "{{architecture}} model · {{quantization}} · {{count}} versions. No description annotation was provided for this model.",
+    "fallbackDescription": "{{architecture}} model · {{quantization}} · {{count}} versions. No description was provided.",
     "notice": {
-      "label": "Data source",
-      "text": "Catalog data is read directly from the cluster's ModelVersion and InferenceRuntimeProfile resources. Descriptions, publishers, licenses and usage boundaries come from resource annotations; verify them against the original model repository before use."
+      "label": "About this catalog",
+      "text": "Model and runtime details come from this deployment's catalog. Descriptions, publishers, licenses and usage notes are supplied with each listing; check the linked source before using a model."
     },
     "spotlight": {
       "aria": "Featured model",
@@ -210,11 +210,11 @@
       "title": "No matching models",
       "text": "Try a broader search or clear some filters.",
       "catalogTitle": "No models yet",
-      "catalogText": "No ModelVersion resources were found in this cluster."
+      "catalogText": "No models have been added to this catalog yet."
     },
     "gridNote": "Compatibility requires a runtime profile to list both the model's architecture and its quantization.",
     "footer": {
-      "source": "Data source · ModelVersion + InferenceRuntimeProfile"
+      "source": "Catalog data · Models and runtimes"
     },
     "detail": {
       "allModels": "Model library",
@@ -316,20 +316,20 @@
       "emptyRuntimeTitle": "No compatible runtime profiles",
       "emptyRuntimeText": "A runtime profile must list both this model's architecture and its quantization; an empty list does not act as a wildcard.",
       "emptyVersionsTitle": "No versions",
-      "emptyVersionsText": "This model has no ModelVersion resources.",
+      "emptyVersionsText": "This model has no versions yet.",
       "emptyUsedByTitle": "Not currently in use",
       "emptyUsedByText": "No inference workload reports this model in status.usedBy.",
       "unavailable": {
         "kicker": "Model library unavailable",
         "title": "The catalog cannot be loaded right now.",
         "retry": "Try again",
-        "disabled": "The model library is disabled on this deployment.",
-        "noCluster": "MedRouter has no Kubernetes API access. Deploy it in-cluster or configure MODEL_LIBRARY_API_URL.",
-        "crdMissing": "The CubeStack CRDs are not installed in this cluster.",
-        "forbidden": "MedRouter is not allowed to list CubeStack resources. Check the ServiceAccount RBAC.",
-        "unauthorized": "The Kubernetes API rejected the service account credentials.",
-        "timeout": "The Kubernetes API did not respond in time.",
-        "apiError": "The model library could not read CubeStack resources."
+        "disabled": "The model catalog is unavailable right now.",
+        "noCluster": "The model catalog is unavailable right now. Please contact the site administrator.",
+        "crdMissing": "The model catalog is not set up for this deployment yet.",
+        "forbidden": "The model catalog is unavailable. Please contact the site administrator.",
+        "unauthorized": "The model catalog is unavailable. Please contact the site administrator.",
+        "timeout": "The model catalog took too long to respond. Try again in a moment.",
+        "apiError": "The model catalog couldn't be loaded. Try again in a moment."
       },
       "notFound": {
         "title": "Model not found",
@@ -341,7 +341,7 @@
   "datasets": {
     "kicker": "DATA HUB · DATASETS",
     "title": "Dataset library",
-    "lead": "Curated, de-identified corpora published to this MedRouter cluster. Check the schema, size and access conditions before you request a copy.",
+    "lead": "Browse datasets available in this deployment. Check the format, size, source and access terms before using one.",
     "refresh": "Refresh",
     "refreshing": "Refreshing…",
     "headNotes": {
@@ -358,8 +358,8 @@
     "fallbackDescription": "{{format}} dataset · {{count}} versions · {{rows}} records. No description annotation was provided for this dataset.",
     "fallbackDescriptionNoRows": "{{format}} dataset · {{count}} versions. No description annotation was provided for this dataset.",
     "notice": {
-      "label": "Data source",
-      "text": "Dataset entries are read directly from the cluster's CubeStack Dataset resources. Descriptions, publishers, licenses and governance fields come from resource annotations; verify them against the source repository before use."
+      "label": "About this catalog",
+      "text": "Dataset details come from this deployment's catalog. Descriptions, publishers, licenses and access notes are provided with each listing; check the source and license terms before use."
     },
     "search": {
       "placeholder": "Search datasets, publishers or tags",
@@ -388,11 +388,11 @@
       "title": "No matching datasets",
       "text": "Try a broader search or clear the task filter.",
       "catalogTitle": "No datasets yet",
-      "catalogText": "No Dataset resources were found in this cluster."
+      "catalogText": "No datasets have been added to this catalog yet."
     },
-    "gridNote": "Format, size and record count come from each Dataset's spec; missing values are shown as unknown rather than inferred.",
+    "gridNote": "Format, size and record count are shown when available; missing details are left blank rather than guessed.",
     "footer": {
-      "source": "Data source · Dataset"
+      "source": "Catalog data · Dataset"
     },
     "detail": {
       "allDatasets": "Dataset library",
@@ -465,18 +465,18 @@
       "warning": "Warning",
       "stale": "Showing cached catalog data from {{time}}.",
       "emptyVersionsTitle": "No versions",
-      "emptyVersionsText": "This dataset has no Dataset resources.",
+      "emptyVersionsText": "This dataset has no versions yet.",
       "unavailable": {
         "kicker": "Dataset library unavailable",
         "title": "The dataset catalog cannot be loaded right now.",
         "retry": "Try again",
-        "disabled": "The dataset library is disabled on this deployment.",
-        "noCluster": "MedRouter has no Kubernetes API access. Deploy it in-cluster or configure DATASET_LIBRARY_API_URL.",
-        "crdMissing": "The CubeStack Dataset CRD is not installed in this cluster.",
-        "forbidden": "MedRouter is not allowed to list CubeStack datasets. Check the ServiceAccount RBAC.",
-        "unauthorized": "The Kubernetes API rejected the service account credentials.",
-        "timeout": "The Kubernetes API did not respond in time.",
-        "apiError": "The dataset library could not read CubeStack resources."
+        "disabled": "The dataset catalog is unavailable right now.",
+        "noCluster": "The dataset catalog is unavailable right now. Please contact the site administrator.",
+        "crdMissing": "The dataset catalog is not set up for this deployment yet.",
+        "forbidden": "The dataset catalog is unavailable. Please contact the site administrator.",
+        "unauthorized": "The dataset catalog is unavailable. Please contact the site administrator.",
+        "timeout": "The dataset catalog took too long to respond. Try again in a moment.",
+        "apiError": "The dataset catalog couldn't be loaded. Try again in a moment."
       },
       "notFound": {
         "title": "Dataset not found",
@@ -488,7 +488,7 @@
   "studio": {
     "kicker": "STUDIO · WORKSPACE",
     "title": "Studio",
-    "lead": "Start from a model or a dataset, check what the cluster can run, and take the next step. The catalogs below are read live; runtime, quota and workspace panels are described but not connected yet.",
+    "lead": "Browse the model and dataset catalogs, then check what is available in this deployment. Runtime, quota and workspace details are not available here yet.",
     "headNotes": {
       "models_one": "{{count}} model",
       "models_other": "{{count}} models",
@@ -504,7 +504,7 @@
       "kicker": "RUNTIME · INFERENCE SERVICE",
       "title": "Runtime is not connected yet",
       "status": "Not connected",
-      "text": "MedRouter reads the model and dataset catalogs from CubeStack. Inference instances, development environments, GPU quota and audit logs also live in CubeStack, but no read-only endpoint exposes them yet, so this page shows no uptime, GPU or throughput figures.",
+      "text": "The model and dataset catalogs are available here. Runtime status, development workspaces, GPU quota and audit logs are not connected, so there are no live usage figures to show.",
       "fields": {
         "inference": "Inference",
         "workspace": "Workspace",
@@ -549,7 +549,7 @@
       },
       "datasets": {
         "title": "Dataset library",
-        "text": "Filter by task, check format, size and governance annotations, then request a copy.",
+        "text": "Review the listed access terms and dataset details. De-identification and ethics information depends on what the publisher provides.",
         "cta": "Open datasets",
         "meta_one": "{{count}} dataset",
         "meta_other": "{{count}} datasets"
@@ -563,19 +563,115 @@
       "unavailable": "Catalog unavailable"
     },
     "footer": {
-      "source": "Data source · ModelVersion · Dataset"
+      "source": "Catalog data · Models · Datasets"
     }
   },
   "home": {
     "hero": {
-      "kicker": "MEDICAL AI MODEL EXCHANGE",
-      "title": "Evidence first. Then the model.",
-      "lead": "The vetted marketplace for medical AI. Every model passport is machine-readable and verifiable, evaluations are bound to versions, and delivery is a multi-tenant SaaS API.",
+      "kicker": "MEDICAL AI MODEL CATALOG",
+      "titlePrefix": "Find medical AI",
+      "titleMark": "by use case.",
+      "subtitle": "Browse models and datasets, with version, intended-use and access details.",
+      "primaryAction": "Start calling for free",
+      "secondaryAction": "Browse models",
+      "preview": {
+        "label": "Illustration of model catalog filters",
+        "badge": "CATALOG PREVIEW",
+        "requestLabel": "FILTER BY",
+        "request": "Find models for lung imaging",
+        "modality": "IMAGING",
+        "department": "RESPIRATORY",
+        "scenarioLabel": "Switch demo scenario",
+        "scenarios": {
+          "imaging": "IMAGING",
+          "records": "CLINICAL TEXT",
+          "drug": "DRUG",
+          "genomics": "GENOMICS"
+        },
+        "steps": {
+          "parse": "PARSE · REQUEST",
+          "candidates": "CANDIDATES · MATCH",
+          "select": "SELECT · EXAMPLE ROUTE"
+        },
+        "outputLabel": "RESPONSE · EXAMPLE",
+        "samples": {
+          "imaging": {
+            "request": "Chest X-ray shows a right lower-lung opacity. Find relevant imaging models.",
+            "modality": "IMAGING",
+            "department": "RESPIRATORY",
+            "parse": "Imaging · Respiratory · X-ray",
+            "candidate1Name": "lavamed-7b",
+            "candidate1Meta": "Imaging · L0",
+            "candidate2Name": "biomistral-7b",
+            "candidate2Meta": "Text · L2",
+            "candidate3Name": "openmed-ner",
+            "candidate3Meta": "NER · L1",
+            "selectedModel": "lavamed-7b",
+            "reason": "Only imaging match; L0 evidence, for research use.",
+            "output": "A matching model listing is shown. Review its intended use and evidence before use.",
+            "evidence": "Research · L0",
+            "review": "Professional review required"
+          },
+          "records": {
+            "request": "Extract medication, dosage and adverse events from a discharge note.",
+            "modality": "CLINICAL TEXT",
+            "department": "CARDIOLOGY",
+            "parse": "Information extraction · Cardiology · EMR text",
+            "candidate1Name": "openmed-ner",
+            "candidate1Meta": "NER · L1",
+            "candidate2Name": "openmed-ner-distilbert",
+            "candidate2Meta": "Lightweight · L1",
+            "candidate3Name": "biomedbert",
+            "candidate3Meta": "Classification · L1",
+            "selectedModel": "openmed-ner",
+            "reason": "Relevant entity types are listed; verify extracted details against the source.",
+            "output": "A matching model listing is shown. Check its version and limitations.",
+            "evidence": "Evidence · L1",
+            "review": "Manual review required"
+          },
+          "drug": {
+            "request": "Find models related to small-molecule screening and ADMET prediction.",
+            "modality": "SMALL MOLECULES",
+            "department": "PHARMACOLOGY",
+            "parse": "Virtual screening · Pharmacology · Molecular structure",
+            "candidate1Name": "deepchem",
+            "candidate1Meta": "Screening · L1",
+            "candidate2Name": "molformer",
+            "candidate2Meta": "Molecular features · L1",
+            "candidate3Name": "biomistral-7b",
+            "candidate3Meta": "Text · L2",
+            "selectedModel": "deepchem",
+            "reason": "Related listing found; predictions require experimental validation.",
+            "output": "Review the model's intended use, version and license in its listing.",
+            "evidence": "Evidence · L1",
+            "review": "Experimental validation required"
+          },
+          "genomics": {
+            "request": "Find genomics models for protein sequences or variant analysis.",
+            "modality": "PROTEIN SEQUENCE",
+            "department": "GENOMICS",
+            "parse": "Sequence modeling · Genomics · Protein sequence",
+            "candidate1Name": "openfold3",
+            "candidate1Meta": "Structure prediction · L3",
+            "candidate2Name": "esm2",
+            "candidate2Meta": "Sequence · L1",
+            "candidate3Name": "scgpt",
+            "candidate3Meta": "Single cell · L3",
+            "selectedModel": "openfold3",
+            "reason": "Protein-structure listing found; confirm its license and intended use.",
+            "output": "Review version details, evidence fields and source information in the listing.",
+            "evidence": "Evidence · L3",
+            "review": "Does not replace genetic counseling"
+          }
+        },
+        "footnote": "Illustrative request and output · Not a diagnosis"
+      },
+      "lead": "Browse models and datasets, review the details provided, and check access terms before you decide what to explore.",
       "searchPlaceholder": "Search models, diseases, departments or vendors",
       "searchButton": "Search",
       "browse": "Browse models",
-      "access": "Request access",
-      "chipsLabel": "Popular scenes",
+      "access": "Create an account",
+      "chipsLabel": "Browse by use case",
       "chips": {
         "lung": "Lung nodule screening",
         "pathology": "Pathology",
@@ -586,58 +682,58 @@
     "trust": {
       "models": "{{n}} models",
       "datasets": "{{n}} datasets",
-      "evidence": "L0–L4 evidence",
-      "delivery": "API-only delivery",
-      "audit": "Auditable calls"
+      "evidence": "Evidence details where provided",
+      "delivery": "Model and dataset catalogs",
+      "audit": "Review versions and access terms"
     },
     "passport": {
-      "kicker": "FEATURED PASSPORT",
-      "regulatoryUnknown": "Regulatory status not stated",
-      "evaluationPending": "MedTrust evaluation pending",
-      "api": "SaaS",
-      "download": "Download"
+      "kicker": "FEATURED MODELS",
+      "regulatoryUnknown": "Regulatory status not provided",
+      "evaluationPending": "Evaluation information not available yet",
+      "api": "API listed",
+      "download": "Download listed"
     },
     "scenes": {
       "kicker": "SCENES",
-      "title": "Enter by problem",
-      "lead": "Hospitals and pharma arrive with a problem, not a model name.",
+      "title": "Browse by use case",
+      "lead": "Use a scenario to narrow the list. Check each model's details before making a decision.",
       "models": "{{n}} models",
-      "bestEvidence": "Best evidence {{level}}",
+      "bestEvidence": "Highest listed evidence {{level}}",
       "enter": "Enter scene",
       "items": {
         "lung": {
           "title": "Lung nodule screening",
-          "description": "From CT images to structured reports, selected by evidence level."
+          "description": "Browse model listings tagged for imaging and respiratory care."
         },
         "pathology": {
           "title": "Pathology assistance",
-          "description": "WSI models, stain normalization and report structuring."
+          "description": "Browse pathology-related models and their listed modalities."
         },
         "chart": {
           "title": "Chart generation & QA",
-          "description": "De-identify, measure hallucinations and isolate tenants before going live."
+          "description": "Browse models tagged for clinical text and records."
         },
         "admet": {
           "title": "Pharma ADMET",
-          "description": "Property prediction, toxicity and scaffold-split evaluation."
+          "description": "Browse models tagged for pharma ADMET tasks."
         }
       }
     },
     "models": {
-      "kicker": "PASSPORT MODELS",
-      "title": "Passport models",
-      "lead": "See the evidence and the scene before the model files.",
+      "kicker": "FEATURED MODELS",
+      "title": "Browse medical AI models",
+      "lead": "Each listing shows the model details available in the catalog. Check the source, license and intended use before relying on it.",
       "viewAll": "View all models",
       "empty": "The model catalog is temporarily unavailable.",
       "retry": "Retry"
     },
     "evaluations": {
-      "kicker": "MEDTRUST",
-      "title": "Evaluations are the product, not a footnote.",
-      "lead": "Evaluations are bound to versions; only de-identified data by default, with client-side evaluation packs.",
-      "apply": "Request joint evaluation",
-      "levels": "Three data levels: public benchmarks · hospital de-identified data · pharma proprietary data.",
-      "note": "The first lighthouse reports are being onboarded.",
+      "kicker": "MEDICAL AI EVALUATION",
+      "title": "Medical AI evaluation",
+      "lead": "Review the model and runtime details in the catalog. Evaluation reports are not available yet.",
+      "apply": "Create an account",
+      "levels": "Evaluation methods and reports are still in development.",
+      "note": "Evaluation details will be added here when available.",
       "dimensions": {
         "effectiveness": "Effectiveness",
         "safety": "Safety",
@@ -649,9 +745,9 @@
       }
     },
     "datasets": {
-      "kicker": "TRUSTED DATA",
-      "title": "Paired trusted data",
-      "lead": "Access level, de-identification and ethics are first-class fields.",
+      "kicker": "DATASETS",
+      "title": "Medical datasets",
+      "lead": "Check each dataset's access terms and any de-identification or ethics information provided.",
       "viewAll": "Browse datasets",
       "access": {
         "public": "Public",
@@ -672,50 +768,50 @@
       "unknownPublisher": "Publisher not stated"
     },
     "delivery": {
-      "kicker": "DELIVERY",
-      "title": "From selection to production",
-      "lead": "One path; no private deployments.",
+      "kicker": "HOW TO USE THE CATALOG",
+      "title": "What to check before using a listing",
+      "lead": "The catalog helps you find listings. Check the source, license and intended use before deciding whether something fits your needs.",
       "steps": {
         "select": {
-          "title": "Select",
-          "text": "Filter by disease, department, task and evidence level; read the passport first."
+          "title": "Browse by use case",
+          "text": "Start with a disease, department or task to narrow the model list."
         },
         "verify": {
-          "title": "Verify & evaluate",
-          "text": "Reports are bound to versions; public, hospital de-identified and pharma proprietary data levels."
+          "title": "Review the listing",
+          "text": "Check its version, description, publisher and any evidence provided."
         },
         "authorize": {
-          "title": "Request & authorize",
-          "text": "Public, invited, institutional or commercial access with a data-use agreement."
+          "title": "Check source and terms",
+          "text": "Review a dataset's source and access terms. Ask the publisher about anything not listed."
         },
         "integrate": {
-          "title": "Integrate via API",
-          "text": "Multi-tenant routing, version pinning and call audit; no private deployment."
+          "title": "Assess it for your use",
+          "text": "Catalog details are for reference; decide based on your own needs and professional requirements."
         }
       },
-      "disclaimer": "The platform does not diagnose, issue regulatory certificates, or replace clinician or company responsibility. Raw patient data is not accepted by default."
+      "disclaimer": "Catalog information is not medical advice and does not replace professional judgment."
     },
     "orgs": {
       "kicker": "ECOSYSTEM",
       "title": "Partner institutions and experts",
-      "text": "We are onboarding partner hospitals, pharma companies and an expert review board. Every endorsement must declare conflicts of interest.",
+      "text": "Partner hospitals, pharma companies and expert reviewers are welcome to get in touch.",
       "contact": "Contact us"
     },
     "cta": {
-      "kicker": "GET STARTED",
+      "kicker": "EXPLORE THE CATALOG",
       "hospital": {
-        "title": "Hospitals & pharma",
-        "text": "Book a walkthrough to assess scenes and compliance.",
-        "button": "Request access"
+        "title": "Find models by use case",
+        "text": "Review the versions, evidence and usage details listed for each model.",
+        "button": "Browse models"
       },
       "vendor": {
-        "title": "Model vendors",
-        "text": "Submit passport fields and enter verification and evaluation.",
-        "button": "List a model"
+        "title": "Explore datasets",
+        "text": "Check dataset formats, sources and any access or ethics information provided.",
+        "button": "Browse datasets"
       }
     },
     "footer": {
-      "tagline": "The vetted marketplace, evaluation center and delivery network for medical AI.",
+      "tagline": "Browse medical AI models and datasets, with version, access and source details.",
       "linksLabel": "Footer navigation",
       "links": {
         "models": "Models",
@@ -725,7 +821,7 @@
         "privacy": "Privacy policy",
         "terms": "Terms of service"
       },
-      "source": "Source · CubeStack ModelVersion / Dataset"
+      "source": "Model and dataset catalog"
     }
   }
 }
