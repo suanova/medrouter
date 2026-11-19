@@ -87,3 +87,42 @@ export interface DatasetDetail extends DatasetCatalogStatus, DatasetSummary {
   versions: DatasetVersionDetail[]
   overview?: DatasetOverview
 }
+
+// Wire types for GET /api/datasets/:name/files. Paths are relative to the
+// version root; the bucket and S3 URI are never exposed.
+
+export interface DatasetFilesStatus {
+  available: boolean
+  reason?: CatalogReason | string
+  message?: string
+  retryable: boolean
+  generated_at: string
+}
+
+export interface DatasetFileEntry {
+  name: string
+  path: string
+  type: 'file' | 'dir'
+  size?: number
+  last_modified?: string
+}
+
+export interface DatasetFiles extends DatasetFilesStatus {
+  ref: string
+  version: string
+  storage: string
+  prefix: string
+  parent?: string
+  entries: DatasetFileEntry[]
+  truncated: boolean
+  next_cursor?: string
+}
+
+export interface DatasetDownload {
+  available: boolean
+  reason?: string
+  message?: string
+  retryable: boolean
+  url?: string
+  expires_at?: string
+}

@@ -91,6 +91,21 @@ type Config struct {
 	DatasetLibraryAPIURL   string
 	DatasetLibraryCacheTTL time.Duration
 	DatasetLibraryTimeout  time.Duration
+
+	// S3 powers dataset file browsing. Dataset contents themselves stay in the
+	// object store; MedRouter only lists keys and signs download URLs.
+	S3Enabled            bool
+	S3Endpoint           string
+	S3Region             string
+	S3PathStyle          bool
+	S3CredentialsFile    string
+	S3CredentialsProfile string
+	S3AccessKeyID        string
+	S3SecretAccessKey    string
+	S3SessionToken       string
+	S3PresignTTL         time.Duration
+	S3ListCacheTTL       time.Duration
+	S3Timeout            time.Duration
 }
 
 // Load reads configuration from the environment. A .env file in the working
@@ -105,6 +120,12 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// An empty S3 endpoint means the standard AWS S3 endpoint for the region.
+	// Custom endpoints (Ceph RGW, MinIO) default to path-style addressing;
+	// real AWS prefers virtual-hosted addressing.
+	s3Endpoint := strings.TrimRight(strings.TrimSpace(os.Getenv("S3_ENDPOINT")), "/")
+	s3PathStyleDefault := s3Endpoint != ""
 
 	cfg := &Config{
 		AppEnv:         appEnv,
@@ -174,6 +195,19 @@ func Load() (*Config, error) {
 		DatasetLibraryAPIURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("DATASET_LIBRARY_API_URL")), "/"),
 		DatasetLibraryCacheTTL: secondsEnv("DATASET_LIBRARY_CACHE_TTL_SECONDS", 30),
 		DatasetLibraryTimeout:  secondsEnv("DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS", 5),
+
+		S3Enabled:            boolEnv("S3_ENABLED", false),
+		S3Endpoint:           s3Endpoint,
+		S3Region:             firstNonEmpty(os.Getenv("S3_REGION"), os.Getenv("AWS_REGION"), os.Getenv("AWS_DEFAULT_REGION"), "us-east-1"),
+		S3PathStyle:          boolEnv("S3_PATH_STYLE", s3PathStyleDefault),
+		S3CredentialsFile:    firstNonEmpty(os.Getenv("S3_CREDENTIALS_FILE"), os.Getenv("AWS_SHARED_CREDENTIALS_FILE")),
+		S3CredentialsProfile: firstNonEmpty(os.Getenv("S3_CREDENTIALS_PROFILE"), os.Getenv("AWS_PROFILE"), "default"),
+		S3AccessKeyID:        firstNonEmpty(os.Getenv("S3_ACCESS_KEY_ID"), os.Getenv("AWS_ACCESS_KEY_ID")),
+		S3SecretAccessKey:    firstNonEmpty(os.Getenv("S3_SECRET_ACCESS_KEY"), os.Getenv("AWS_SECRET_ACCESS_KEY")),
+		S3SessionToken:       firstNonEmpty(os.Getenv("S3_SESSION_TOKEN"), os.Getenv("AWS_SESSION_TOKEN")),
+		S3PresignTTL:         secondsEnv("S3_PRESIGN_TTL_SECONDS", 600),
+		S3ListCacheTTL:       secondsEnv("S3_LIST_CACHE_TTL_SECONDS", 20),
+		S3Timeout:            secondsEnv("S3_REQUEST_TIMEOUT_SECONDS", 5),
 	}
 
 	if cfg.SessionSecret == "" {
@@ -281,6 +315,17 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// firstNonEmpty returns the first non-blank value. It is used for settings
+// that accept both the MedRouter name and the conventional AWS name.
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func boolEnv(key string, fallback bool) bool {

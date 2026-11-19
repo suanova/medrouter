@@ -411,7 +411,8 @@
       "tabs": {
         "aria": "Dataset details",
         "overview": "Overview",
-        "versions": "Versions"
+        "versions": "Versions",
+        "files": "Files"
       },
       "overviewTitle": "Dataset overview",
       "providedBy": "Provided by {{publisher}}",
@@ -482,6 +483,43 @@
         "title": "Dataset not found",
         "text": "No dataset matches this name. It may have been renamed or removed.",
         "back": "Back to datasets"
+      }
+    },
+    "files": {
+      "title": "Dataset files",
+      "aria": "Dataset file browser",
+      "version": "Version",
+      "root": "Root",
+      "name": "Name",
+      "size": "Size",
+      "modified": "Modified",
+      "download": "Download",
+      "downloadAfterSignIn": "Sign in to download",
+      "downloadFailed": "The download could not be started. Please try again.",
+      "loadMore": "Load more",
+      "retry": "Try again",
+      "emptyTitle": "This folder is empty",
+      "emptyText": "No files were found in this directory.",
+      "unsupportedTitle": "Online browsing unavailable",
+      "unsupportedText": "This dataset has no S3-backed version that can be browsed online.",
+      "unavailableTitle": "The file list cannot be loaded",
+      "storageNote": "Version {{version}} · Storage {{storage}} · Paths are relative to the dataset root",
+      "reasons": {
+        "S3_DISABLED": "Dataset file browsing is disabled for this deployment.",
+        "S3_URI_MISSING": "This version does not declare a usable S3 location.",
+        "UNSUPPORTED_STORAGE": "This version is not stored in S3 and cannot be browsed online.",
+        "S3_AUTH": "The object store rejected the platform credentials.",
+        "S3_UNAVAILABLE": "The object store is temporarily unavailable. Try again in a moment.",
+        "TIMEOUT": "The object store did not respond in time. Try again in a moment.",
+        "INVALID_PATH": "The requested path is not valid.",
+        "NOT_FOUND": "The file does not exist.",
+        "DISABLED": "The dataset catalog is unavailable right now.",
+        "NO_CLUSTER": "The dataset catalog is unavailable. Please contact the site administrator.",
+        "CRD_MISSING": "The dataset catalog is not set up for this deployment yet.",
+        "FORBIDDEN": "The dataset catalog is unavailable. Please contact the site administrator.",
+        "UNAUTHORIZED": "The dataset catalog is unavailable. Please contact the site administrator.",
+        "API_ERROR": "The dataset catalog could not be loaded. Try again in a moment.",
+        "default": "The dataset files could not be loaded right now."
       }
     }
   },

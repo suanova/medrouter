@@ -11,6 +11,7 @@ MedRouter 是一个面向 AI 模型的托管与分享平台（目标类似 Huggi
 - 完整账号界面（登录、注册、OAuth、仪表盘）与中英双语、亮/暗主题
 - 模型库列表 `/models` 与详情 `/models/$name`：直接读取 CubeStack `ModelVersion` / `InferenceRuntimeProfile`，展示模型卡、存储摘要、兼容运行时与全部版本；集群不可用时优雅降级
 - 数据集库列表 `/datasets` 与详情 `/datasets/$name`：读取 CubeStack `Dataset`，按语义名合并版本，展示格式、体积、记录数、版本与访问/去标识化/伦理等边界信息；与模型库独立降级
+- 数据集文件浏览（配置 S3 后启用）：在数据集详情「文件」页读取 `Dataset.spec.storage.s3.uri`，按目录分页浏览；浏览公开，下载需登录并由后端签发短期预签名 URL
 - 工作室 `/studio`：模型与数据集目录的入口页，展示两个目录的最近更新与接入状态；运行态、配额与审计尚未接入，页面明确标注而不展示估算数值
 - 首页内容暂留空，仅保留站点导航
 - 生产模式由 Go 二进制内嵌前端静态资源，并支持部署在子路径（`BASE_PATH`）
@@ -182,6 +183,16 @@ CI 工作流 [`.github/workflows/kind-postgres.yaml`](.github/workflows/kind-pos
 | `DATASET_LIBRARY_CACHE_TTL_SECONDS` | `30` | 数据集目录快照缓存 TTL |
 | `DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS` | `5` | 单次读取 Dataset CRD 的超时 |
 | `DATASET_LIBRARY_API_URL` | 空 | 为空时回退 `MODEL_LIBRARY_API_URL` |
+| `S3_ENABLED` | `false` | 数据集文件浏览开关；关闭后接口返回 `available:false, reason:"S3_DISABLED"` |
+| `S3_ENDPOINT` | 空 | S3 兼容端点（含 scheme），如 `http://10.66.2.1:30880`；**留空则使用 AWS 标准端点** |
+| `S3_REGION` | `us-east-1` | SigV4 签名 region；也接受 `AWS_REGION` / `AWS_DEFAULT_REGION` |
+| `S3_PATH_STYLE` | 自定义端点 `true`，AWS 端点 `false` | 路径风格寻址；RGW/MinIO 用 `true`，AWS 用 `false`（虚拟主机风格） |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 空 | 静态凭据；也接受 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+| `S3_SESSION_TOKEN` | 空 | 临时凭据的会话令牌（STS）；也接受 `AWS_SESSION_TOKEN`；长期密钥留空 |
+| `S3_CREDENTIALS_FILE` / `S3_CREDENTIALS_PROFILE` | 空 / `default` | 也可读取 AWS shared credentials 文件，替代上面的环境变量 |
+| `S3_PRESIGN_TTL_SECONDS` | `600` | 下载 URL 有效期 |
+| `S3_LIST_CACHE_TTL_SECONDS` | `20` | 目录列表缓存 TTL |
+| `S3_REQUEST_TIMEOUT_SECONDS` | `5` | 单次对象存储请求超时 |
 
 数据库在启动时通过 GORM `AutoMigrate` 自动建表；SQLite 默认开启 WAL 与 `busy_timeout`，并将连接数限制为 1（仅适合单实例）。
 
@@ -266,6 +277,63 @@ curl -s localhost:3000/api/datasets | jq '.data.available, .data.total'
 
 Helm Chart 为数据集库单独创建只读 ClusterRole/ClusterRoleBinding，仅授予 `datasets` 的 `list` 权限（`datasetLibrary.*`，与模型库互不影响）。
 
+## 数据集文件浏览（S3）
+
+数据集内容不经过 MedRouter：详情页新增「文件」tab，读取该 `Dataset` 版本 `spec.storage.s3.uri`（`s3://bucket/prefix`），按 `delimiter=/` 逐层列出目录；下载由后端调用 `HeadObject` 校验后签发短期预签名 URL，凭据只存在于服务端。
+
+- 只对 `storage.strategy: S3` 且声明了非空 `s3.uri` 的版本可浏览；`HostPath` / PVC / 缺少 URI 的版本显示明确原因，不猜测路径。
+- 浏览公开；下载接口位于登录态路由，未登录返回 401 `UNAUTHENTICATED`。
+- 用户只能看到相对版本根目录的路径，bucket、完整 URI、端点与凭据名不会下发；`prefix` / `path` 拒绝绝对路径、`..`、反斜杠与控制字符。
+- 目录列表按 `(bucket, prefix, cursor, limit)` 缓存 20 秒并用 singleflight 合并并发请求；单页默认 200、上限 1000。
+- `Dataset.spec.storage.s3.uri` 必须包含非空前缀（不允许浏览整个 bucket 根）。
+
+**在真实 AWS 上最小配置**（不设置 `S3_ENDPOINT`）：
+
+```sh
+S3_ENABLED=true
+S3_REGION=ap-east-1          # 你的桶所在 region
+S3_PATH_STYLE=false          # AWS 使用虚拟主机风格
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+# 临时凭据才需要：S3_SESSION_TOKEN=...
+```
+
+> 注意：应用列的是 **bucket 内某个 prefix 的对象**，不会调用 `ListBuckets`。  
+> 每个 `Dataset.spec.storage.s3.uri` 必须写成你的 AWS 桶，例如
+> `s3://my-medical-datasets/pubchem/bioassay/2024-09`。IAM 至少需要该桶的
+> `s3:ListBucket`；下载还需要 `s3:GetObject`。
+
+本地用 AWS CLI 验证（与 MedRouter 无关，用于确认凭据/网络）：
+
+```sh
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_SESSION_TOKEN=...        # 仅临时凭据
+export AWS_DEFAULT_REGION=ap-east-1
+aws sts get-caller-identity         # 确认用的是哪组身份
+aws s3 ls                           # 需要 s3:ListAllMyBuckets
+aws s3 ls s3://my-medical-datasets/ # 需要 s3:ListBucket
+```
+
+**重要前提**：预签名 URL 由浏览器直接访问，因此 `S3_ENDPOINT` 必须对最终用户可达（LB / Ingress / 公网 RGW）。如果对象存储只在集群内可达，需要后续增加「同源流式代理」下载模式（`S3_DOWNLOAD_MODE=proxy`），当前版本未实现。
+
+Helm 配置（`datasetFiles.*`）：
+
+```yaml
+datasetFiles:
+  enabled: true
+  endpoint: http://10.66.2.1:30880
+  region: us-east-1
+  pathStyle: true
+  credentials:
+    # 在 release 命名空间预先创建，包含下面两个 key（只读权限即可）
+    existingSecret: medrouter-s3-credentials
+    accessKeyKey: S3_ACCESS_KEY_ID
+    secretKeyKey: S3_SECRET_ACCESS_KEY
+```
+
+也可以把 AWS shared credentials 文件通过 `extraVolumes` 挂载，并设置 `datasetFiles.credentialsFile`；此时不需要 `existingSecret`。`cubestack-system/cubestack-s3-credentials` 的 `credentials` key 就是这种格式，但跨命名空间不能直接挂载，需要复制到 MedRouter 的命名空间或另建只读凭据。
+
 ## API 概览
 
 响应统一为：
@@ -292,6 +360,8 @@ Helm Chart 为数据集库单独创建只读 ClusterRole/ClusterRoleBinding，�
 | `GET` | `/api/models/:name` | 模型详情（`spec.model` 或 `ModelVersion.metadata.name`；不存在 404） |
 | `GET` | `/api/datasets` | 数据集库列表（公开；集群异常时 200 + `available:false`） |
 | `GET` | `/api/datasets/:name` | 数据集详情（`spec.dataset` 或 `Dataset.metadata.name`；不存在 404 `DATASET_NOT_FOUND`） |
+| `GET` | `/api/datasets/:name/files` | 数据集目录列表（公开；`ref`、`prefix`、`cursor`、`limit`；不可用时 200 + `available:false`） |
+| `GET` | `/api/datasets/:name/files/download` | 签发某个文件的预签名 URL（需登录；`ref`、`path`） |
 
 ## 测试
 
@@ -303,6 +373,7 @@ make check      # go vet + tsc + tests
 - 后端集成测试使用临时 SQLite，覆盖注册/登录/登出、验证码、会话失效与滑动续期、同源校验、OAuth 错误跳转、子路径部署。
 - 模型目录测试覆盖版本分组与自然排序、注解回退、兼容规则、存储脱敏、TTL/负缓存/stale 降级与 CRD 错误分类。
 - 数据集目录测试覆盖语义分组、版本排序、注解回退、存储脱敏，以及独立缓存与降级路径。
+- 数据集文件浏览测试覆盖 S3 列表投影、相对路径与越权校验、错误分类、预签名下载与未登录 401。
 - 前端测试覆盖安全跳转、表单校验规则、品牌组件，以及模型/数据集的筛选、排序与搜索参数解析。
 - PostgreSQL 可通过 `SQL_DSN=postgres://... go run .` 手动验证；自动化测试目前只使用 SQLite。
 

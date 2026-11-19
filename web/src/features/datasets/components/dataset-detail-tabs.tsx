@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
-export type DatasetTab = 'overview' | 'versions'
+export type DatasetTab = 'overview' | 'versions' | 'files'
 
 interface DatasetDetailTabsProps {
   active: DatasetTab
@@ -17,6 +17,7 @@ export function DatasetDetailTabs({
   const tabs: { id: DatasetTab; label: string; count?: number }[] = [
     { id: 'overview', label: t('datasets.detail.tabs.overview') },
     { id: 'versions', label: t('datasets.detail.tabs.versions'), count: versionCount },
+    { id: 'files', label: t('datasets.detail.tabs.files') },
   ]
 
   return (

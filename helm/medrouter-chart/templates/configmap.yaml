@@ -40,6 +40,15 @@ data:
   DATASET_LIBRARY_ENABLED: {{ .Values.datasetLibrary.enabled | quote }}
   DATASET_LIBRARY_CACHE_TTL_SECONDS: {{ .Values.datasetLibrary.cacheTTLSeconds | quote }}
   DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS: {{ .Values.datasetLibrary.requestTimeoutSeconds | quote }}
+  S3_ENABLED: {{ .Values.datasetFiles.enabled | quote }}
+  S3_ENDPOINT: {{ .Values.datasetFiles.endpoint | quote }}
+  S3_REGION: {{ .Values.datasetFiles.region | quote }}
+  S3_PATH_STYLE: {{ .Values.datasetFiles.pathStyle | quote }}
+  S3_CREDENTIALS_FILE: {{ .Values.datasetFiles.credentialsFile | quote }}
+  S3_CREDENTIALS_PROFILE: {{ .Values.datasetFiles.credentialsProfile | quote }}
+  S3_PRESIGN_TTL_SECONDS: {{ .Values.datasetFiles.presignTTLSeconds | quote }}
+  S3_LIST_CACHE_TTL_SECONDS: {{ .Values.datasetFiles.listCacheTTLSeconds | quote }}
+  S3_REQUEST_TIMEOUT_SECONDS: {{ .Values.datasetFiles.requestTimeoutSeconds | quote }}
   {{- if eq (toString (default "postgres" .Values.database.mode)) "sqlite" }}
   SQLITE_PATH: "/data/medrouter.db"
   {{- end }}
