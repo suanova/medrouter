@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,6 +88,53 @@ func (c *ModelCatalog) Detail(ctx context.Context, ref string) (*ModelDetail, bo
 	return detail, true
 }
 
+// ResolveVersionStorage resolves one ModelVersion for the file browser. It
+// returns the raw storage block (only inside the API process; it is never
+// serialized), whether the version exists, and the catalog status so the caller
+// can tell a missing model from an unavailable catalog.
+//
+// versionRef may be a ModelVersion metadata.name, a spec.version, or empty for
+// the latest version of the group.
+func (c *ModelCatalog) ResolveVersionStorage(ctx context.Context, name, versionRef string) (VersionStorage, bool, StorageStatus) {
+	snap := c.snapshot(ctx)
+	status := StorageStatus{
+		Available: snap.list.Available,
+		Reason:    snap.list.Reason,
+		Message:   snap.list.Message,
+		Retryable: snap.list.Retryable,
+	}
+	if !snap.available {
+		return VersionStorage{}, false, status
+	}
+
+	group, ok := findGroup(groupModelVersions(snap.mvs), name)
+	if !ok {
+		return VersionStorage{}, false, status
+	}
+
+	chosen := group.versions[0]
+	if ref := strings.TrimSpace(versionRef); ref != "" {
+		found := false
+		for _, version := range group.versions {
+			if version.Metadata.Name == ref || version.Spec.Version == ref {
+				chosen = version
+				found = true
+				break
+			}
+		}
+		if !found {
+			return VersionStorage{}, false, status
+		}
+	}
+
+	return VersionStorage{
+		Ref:      chosen.Metadata.Name,
+		Version:  chosen.Spec.Version,
+		Strategy: chosen.Spec.Storage.Strategy,
+		S3URI:    s3URI(chosen.Spec.Storage.S3),
+	}, true, status
+}
+
 func (c *ModelCatalog) snapshot(ctx context.Context) *catalogSnapshot {
 	now := c.now()
 	c.mu.Lock()
@@ -144,13 +192,13 @@ func (c *ModelCatalog) fetch(ctx context.Context) *catalogSnapshot {
 	defer cancel()
 
 	var (
-		mvs       []kube.ModelVersion
-		profiles  []kube.RuntimeProfile
-		ovModels  []kube.OverviewConfigMap
-		mvErr     error
-		profErr   error
-		ovErr     error
-		wg        sync.WaitGroup
+		mvs      []kube.ModelVersion
+		profiles []kube.RuntimeProfile
+		ovModels []kube.OverviewConfigMap
+		mvErr    error
+		profErr  error
+		ovErr    error
+		wg       sync.WaitGroup
 	)
 	wg.Add(3)
 	go func() {

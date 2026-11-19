@@ -84,11 +84,11 @@ func filesTestDataset(strategy, uri string) kube.Dataset {
 	}
 }
 
-func newFilesService(t *testing.T, dataset kube.Dataset, store ObjectStore) *DatasetFilesService {
+func newFilesService(t *testing.T, dataset kube.Dataset, store ObjectStore) *FilesService {
 	t.Helper()
 	cfg := filesTestConfig()
 	catalog := NewDatasetCatalog(cfg, &fakeSource{datasets: []kube.Dataset{dataset}})
-	return NewDatasetFilesService(cfg, catalog, store)
+	return NewFilesService(cfg, catalog, store)
 }
 
 func TestDatasetFilesListProjectsRelativeEntries(t *testing.T) {
@@ -214,7 +214,7 @@ func TestDatasetFilesListMapsStoreErrors(t *testing.T) {
 func TestDatasetFilesListOnUnavailableCatalog(t *testing.T) {
 	cfg := filesTestConfig()
 	catalog := NewDatasetCatalog(cfg, &fakeSource{dsErr: errors.New("cluster down")})
-	svc := NewDatasetFilesService(cfg, catalog, &fakeStore{})
+	svc := NewFilesService(cfg, catalog, &fakeStore{})
 
 	files, found := svc.List(context.Background(), "demo", "", "", "", 200)
 	if !found || files == nil {
@@ -243,7 +243,7 @@ func TestDatasetFilesVersionSelection(t *testing.T) {
 	v2.Spec.Version = "2025"
 	v2.Metadata.CreationTimestamp = v2.Metadata.CreationTimestamp.Add(24 * time.Hour)
 	catalog := NewDatasetCatalog(cfg, &fakeSource{datasets: []kube.Dataset{v1, v2}})
-	svc := NewDatasetFilesService(cfg, catalog, &fakeStore{})
+	svc := NewFilesService(cfg, catalog, &fakeStore{})
 
 	files, found := svc.List(context.Background(), "demo", "2024", "", "", 200)
 	if !found || files.Ref != "demo-2024" || files.Version != "2024" {

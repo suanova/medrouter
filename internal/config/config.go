@@ -92,7 +92,7 @@ type Config struct {
 	DatasetLibraryCacheTTL time.Duration
 	DatasetLibraryTimeout  time.Duration
 
-	// S3 powers dataset file browsing. Dataset contents themselves stay in the
+	// S3 powers the dataset and model file browser. Data itself stays in the
 	// object store; MedRouter only lists keys and signs download URLs.
 	S3Enabled            bool
 	S3Endpoint           string

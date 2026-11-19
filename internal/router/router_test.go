@@ -109,6 +109,10 @@ func newTestApp(t *testing.T, mutate func(*config.Config)) *testApp {
 		Verification: controller.NewVerificationController(verification),
 		OAuth:        controller.NewOAuthController(cfg, oauth, sessions),
 		Status:       controller.NewStatusController(cfg, oauth),
+		Models: controller.NewModelController(
+			service.NewModelCatalog(cfg, kube.DisabledSource),
+			nil,
+		),
 		Datasets: controller.NewDatasetController(
 			service.NewDatasetCatalog(cfg, kube.DisabledSource),
 			nil,
@@ -579,6 +583,21 @@ func TestOAuthDisabledProviderRedirects(t *testing.T) {
 	if location := resp.Header.Get("Location"); !strings.Contains(location, "oauth_error=") {
 		t.Fatalf("callback redirect = %q, want oauth_error", location)
 	}
+}
+
+func TestModelDownloadRequiresAuth(t *testing.T) {
+	app := newTestApp(t, nil)
+
+	// Browsing is public; a deployment without S3 reports the disabled state.
+	resp, env := app.request(http.MethodGet, "/api/models/demo/files", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("files status = %d", resp.StatusCode)
+	}
+	app.mustSuccess(env, "public model file listing")
+
+	// Downloading is not.
+	resp, env = app.request(http.MethodGet, "/api/models/demo/files/download?path=config.json", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "model download without a session")
 }
 
 func TestDatasetDownloadRequiresAuth(t *testing.T) {
