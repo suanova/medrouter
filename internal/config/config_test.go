@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,12 @@ var envKeys = []string{
 	"MODEL_LIBRARY_OVERVIEW_NAMESPACE",
 	"DATASET_LIBRARY_ENABLED", "DATASET_LIBRARY_API_URL",
 	"DATASET_LIBRARY_CACHE_TTL_SECONDS", "DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS",
+	"S3_ENABLED", "S3_ENDPOINT", "S3_REGION", "S3_PATH_STYLE",
+	"S3_CREDENTIALS_FILE", "S3_CREDENTIALS_PROFILE",
+	"S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_SESSION_TOKEN",
+	"S3_PRESIGN_TTL_SECONDS", "S3_LIST_CACHE_TTL_SECONDS", "S3_REQUEST_TIMEOUT_SECONDS",
+	"AWS_REGION", "AWS_DEFAULT_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+	"AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE",
 }
 
 func clearEnv(t *testing.T) {
@@ -99,6 +106,143 @@ func TestDatasetLibraryConfig(t *testing.T) {
 	}
 	if cfg.DatasetLibraryCacheTTL.Seconds() != 45 || cfg.DatasetLibraryTimeout.Seconds() != 8 {
 		t.Fatalf("dataset durations = %s/%s", cfg.DatasetLibraryCacheTTL, cfg.DatasetLibraryTimeout)
+	}
+}
+
+func TestS3Config(t *testing.T) {
+	clearEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.S3Enabled || cfg.S3Region != "us-east-1" || cfg.S3PathStyle {
+		t.Fatalf("S3 defaults = %+v", cfg)
+	}
+	if cfg.S3PresignTTL.Seconds() != 600 || cfg.S3ListCacheTTL.Seconds() != 20 || cfg.S3Timeout.Seconds() != 5 {
+		t.Fatalf("S3 durations = %s/%s/%s", cfg.S3PresignTTL, cfg.S3ListCacheTTL, cfg.S3Timeout)
+	}
+
+	t.Setenv("S3_ENABLED", "true")
+	t.Setenv("S3_ENDPOINT", "http://10.66.2.1:30880/")
+	t.Setenv("S3_REGION", "cn-east-1")
+	t.Setenv("S3_PATH_STYLE", "false")
+	t.Setenv("S3_ACCESS_KEY_ID", "key")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "secret")
+	t.Setenv("S3_SESSION_TOKEN", "token")
+	t.Setenv("S3_PRESIGN_TTL_SECONDS", "900")
+	t.Setenv("S3_LIST_CACHE_TTL_SECONDS", "15")
+	t.Setenv("S3_REQUEST_TIMEOUT_SECONDS", "7")
+
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.S3Enabled || cfg.S3Endpoint != "http://10.66.2.1:30880" || cfg.S3Region != "cn-east-1" || cfg.S3PathStyle {
+		t.Fatalf("S3 config = %+v", cfg)
+	}
+	if cfg.S3PresignTTL.Seconds() != 900 || cfg.S3ListCacheTTL.Seconds() != 15 || cfg.S3Timeout.Seconds() != 7 {
+		t.Fatalf("S3 durations = %s/%s/%s", cfg.S3PresignTTL, cfg.S3ListCacheTTL, cfg.S3Timeout)
+	}
+
+	credentials, err := cfg.LoadS3Credentials()
+	if err != nil {
+		t.Fatalf("LoadS3Credentials: %v", err)
+	}
+	if credentials.AccessKeyID != "key" || credentials.SecretAccessKey != "secret" || credentials.SessionToken != "token" {
+		t.Fatalf("credentials = %+v", credentials)
+	}
+}
+
+func TestS3AWSNativeConfig(t *testing.T) {
+	clearEnv(t)
+
+	// With no S3_ENDPOINT the client uses the standard AWS endpoint, so the
+	// conventional AWS environment variables are accepted as fallbacks.
+	t.Setenv("S3_ENABLED", "true")
+	t.Setenv("AWS_REGION", "ap-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "aws-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "aws-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "aws-token")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.S3Endpoint != "" || cfg.S3Region != "ap-east-1" || cfg.S3PathStyle {
+		t.Fatalf("AWS config = %+v", cfg)
+	}
+	credentials, err := cfg.LoadS3Credentials()
+	if err != nil {
+		t.Fatalf("LoadS3Credentials: %v", err)
+	}
+	if credentials.AccessKeyID != "aws-key" || credentials.SecretAccessKey != "aws-secret" || credentials.SessionToken != "aws-token" {
+		t.Fatalf("credentials = %+v", credentials)
+	}
+
+	// S3_* takes precedence over AWS_*.
+	t.Setenv("S3_REGION", "eu-west-1")
+	t.Setenv("S3_ACCESS_KEY_ID", "s3-key")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "s3-secret")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.S3Region != "eu-west-1" || cfg.S3AccessKeyID != "s3-key" {
+		t.Fatalf("S3_* should win: %+v", cfg)
+	}
+}
+
+func TestLoadS3CredentialsFile(t *testing.T) {
+	clearEnv(t)
+
+	dir := t.TempDir()
+	filename := dir + "/credentials"
+	content := `# AWS shared credentials
+[default]
+aws_access_key_id = default-key
+aws_secret_access_key = default-secret
+
+[platform]
+aws_access_key_id = platform-key
+aws_secret_access_key = platform-secret
+aws_session_token = platform-token
+`
+	if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+		t.Fatalf("write credentials: %v", err)
+	}
+
+	t.Setenv("S3_CREDENTIALS_FILE", filename)
+	t.Setenv("S3_CREDENTIALS_PROFILE", "platform")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	credentials, err := cfg.LoadS3Credentials()
+	if err != nil {
+		t.Fatalf("LoadS3Credentials: %v", err)
+	}
+	if credentials.AccessKeyID != "platform-key" || credentials.SecretAccessKey != "platform-secret" || credentials.SessionToken != "platform-token" {
+		t.Fatalf("credentials = %+v", credentials)
+	}
+
+	t.Setenv("S3_CREDENTIALS_PROFILE", "missing")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, err := cfg.LoadS3Credentials(); err == nil {
+		t.Fatal("a missing profile should fail")
+	}
+
+	// Anonymous access when neither env nor a file is configured.
+	clearEnv(t)
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if credentials, err := cfg.LoadS3Credentials(); err != nil || credentials.AccessKeyID != "" {
+		t.Fatalf("anonymous credentials = %+v err=%v", credentials, err)
 	}
 }
 

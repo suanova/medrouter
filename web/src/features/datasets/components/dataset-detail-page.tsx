@@ -13,6 +13,7 @@ import { DatasetNotFoundError } from '../api'
 import { datasetDetailQueryOptions } from '../queries'
 import { DatasetDetailHeader } from './dataset-detail-header'
 import { DatasetDetailTabs, type DatasetTab } from './dataset-detail-tabs'
+import { DatasetFilesPanel } from './dataset-files-panel'
 import { DatasetInfoCard } from './dataset-info-card'
 import { DatasetOverviewPanel } from './dataset-overview-panel'
 import { DatasetVersionList } from './dataset-version-list'
@@ -136,6 +137,8 @@ export function DatasetDetailPage() {
                     <DatasetVersionList versions={data.versions} />
                   </section>
                 ) : null}
+
+                {activeTab === 'files' ? <DatasetFilesPanel detail={data} /> : null}
 
                 <aside className='ml-detail-side'>
                   <DatasetInfoCard detail={data} />

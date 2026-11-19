@@ -405,7 +405,8 @@
       "tabs": {
         "aria": "数据集详情",
         "overview": "概览",
-        "versions": "版本"
+        "versions": "版本",
+        "files": "文件"
       },
       "overviewTitle": "数据集概览",
       "providedBy": "由 {{publisher}} 提供",
@@ -476,6 +477,43 @@
         "title": "数据集不存在",
         "text": "没有与这个名称匹配的数据集，它可能已被重命名或删除。",
         "back": "返回数据集"
+      }
+    },
+    "files": {
+      "title": "数据集文件",
+      "aria": "数据集文件浏览",
+      "version": "版本",
+      "root": "根目录",
+      "name": "名称",
+      "size": "大小",
+      "modified": "修改时间",
+      "download": "下载",
+      "downloadAfterSignIn": "登录后下载",
+      "downloadFailed": "无法开始下载，请稍后重试。",
+      "loadMore": "加载更多",
+      "retry": "重试",
+      "emptyTitle": "目录为空",
+      "emptyText": "这个目录下没有文件。",
+      "unsupportedTitle": "暂不支持在线浏览",
+      "unsupportedText": "该数据集没有可在线浏览的 S3 版本。",
+      "unavailableTitle": "暂时无法读取文件列表",
+      "storageNote": "版本 {{version}} · 存储 {{storage}} · 路径相对于数据集根目录",
+      "reasons": {
+        "S3_DISABLED": "当前部署未启用数据集文件浏览。",
+        "S3_URI_MISSING": "该版本未声明可用的 S3 位置。",
+        "UNSUPPORTED_STORAGE": "该版本不在 S3 上，无法在线浏览。",
+        "S3_AUTH": "对象存储拒绝了平台凭证。",
+        "S3_UNAVAILABLE": "对象存储暂时不可用，请稍后重试。",
+        "TIMEOUT": "对象存储响应超时，请稍后重试。",
+        "INVALID_PATH": "请求的路径无效。",
+        "NOT_FOUND": "文件不存在。",
+        "DISABLED": "数据集目录暂不可用。",
+        "NO_CLUSTER": "数据集目录暂时不可用，请联系站点管理员。",
+        "CRD_MISSING": "当前部署尚未配置数据集目录。",
+        "FORBIDDEN": "数据集目录暂时不可用，请联系站点管理员。",
+        "UNAUTHORIZED": "数据集目录暂时不可用，请联系站点管理员。",
+        "API_ERROR": "暂时无法加载数据集目录，请稍后重试。",
+        "default": "暂时无法加载数据集文件。"
       }
     }
   },

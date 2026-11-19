@@ -73,6 +73,44 @@ datasetLibrary:
   cacheTTLSeconds: 30
   requestTimeoutSeconds: 5
 
+# ---------------------------------------------------------------------------
+# Dataset files (S3)
+#
+# The dataset "Files" tab lists object keys and signs short-lived download
+# URLs; dataset bytes never pass through MedRouter. Each Dataset CR declares
+# its own s3://bucket/prefix in spec.storage.s3.uri, so this block only carries
+# the endpoint and a read-only credential. Browsing is public; downloads
+# require a signed-in user.
+# ---------------------------------------------------------------------------
+datasetFiles:
+  enabled: false
+  # S3-compatible endpoint including the scheme, e.g. http://10.66.2.1:30880
+  # (Ceph RGW) or https://s3.example.com. Leave empty on real AWS to use the
+  # standard endpoint for the region.
+  endpoint: ""
+  region: us-east-1
+  # Ceph RGW and most self-hosted stores need path-style addressing. Set to
+  # false on real AWS (virtual-hosted style).
+  pathStyle: true
+  credentials:
+    # Existing Secret in the release namespace. The keys below are read from
+    # it and injected as env vars. Leave empty for a public bucket or when
+    # credentialsFile is mounted through extraVolumes instead.
+    existingSecret: ""
+    accessKeyKey: S3_ACCESS_KEY_ID
+    secretKeyKey: S3_SECRET_ACCESS_KEY
+    sessionTokenKey: S3_SESSION_TOKEN
+  # Optional path to an AWS shared credentials file (INI). Mount it with
+  # extraVolumes/extraVolumeMounts and point this at the mounted file.
+  credentialsFile: ""
+  credentialsProfile: default
+  # Signed download URL lifetime. Keep it short; the browser follows the URL
+  # directly to the object store.
+  presignTTLSeconds: 600
+  # Directory listing cache and per-request object-store timeout.
+  listCacheTTLSeconds: 20
+  requestTimeoutSeconds: 5
+
 # Keep at 1 with SQLite: a SQLite file cannot be shared between pods. The
 # chart rejects replicaCount > 1 in SQLite mode. PostgreSQL modes can scale.
 replicaCount: 1

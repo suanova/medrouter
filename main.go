@@ -17,6 +17,7 @@ import (
 	"github.com/suanova/medrouter/internal/kube"
 	"github.com/suanova/medrouter/internal/model"
 	"github.com/suanova/medrouter/internal/router"
+	"github.com/suanova/medrouter/internal/s3"
 	"github.com/suanova/medrouter/internal/service"
 )
 
@@ -45,13 +46,15 @@ func main() {
 	oauth := service.NewOAuthService(cfg, users, sessions)
 	catalog := service.NewModelCatalog(cfg, newCatalogSource(cfg))
 	datasetCatalog := service.NewDatasetCatalog(cfg, newDatasetSource(cfg))
+	datasetStore := newDatasetFilesStore(cfg)
+	datasetFiles := service.NewDatasetFilesService(cfg, datasetCatalog, datasetStore)
 
 	userController := controller.NewUserController(cfg, users, sessions)
 	verificationController := controller.NewVerificationController(verification)
 	oauthController := controller.NewOAuthController(cfg, oauth, sessions)
 	statusController := controller.NewStatusController(cfg, oauth)
 	modelController := controller.NewModelController(catalog)
-	datasetController := controller.NewDatasetController(datasetCatalog)
+	datasetController := controller.NewDatasetController(datasetCatalog, datasetFiles)
 
 	engine := router.New(router.Deps{
 		Config:       cfg,
@@ -94,6 +97,15 @@ func main() {
 	} else {
 		log.Printf("dataset library: disabled")
 	}
+	if datasetStore != nil {
+		if cfg.S3Endpoint != "" {
+			log.Printf("dataset files: object store at %s", cfg.S3Endpoint)
+		} else {
+			log.Printf("dataset files: using the default AWS S3 endpoint (region %s)", cfg.S3Region)
+		}
+	} else {
+		log.Printf("dataset files: browsing disabled")
+	}
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -120,6 +132,39 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "shutdown: %v\n", err)
 	}
+}
+
+// newDatasetFilesStore builds the S3-backed file browser store. It returns nil
+// (S3_DISABLED in the API) when the feature is off or misconfigured; a bad
+// configuration must never keep MedRouter from starting.
+func newDatasetFilesStore(cfg *config.Config) service.ObjectStore {
+	if !cfg.S3Enabled {
+		return nil
+	}
+	if cfg.S3Endpoint == "" {
+		// Empty means the standard AWS S3 endpoint for S3_REGION. This is the
+		// normal configuration on real AWS; custom stores set S3_ENDPOINT.
+		log.Printf("dataset files: no S3_ENDPOINT; using the default AWS endpoint (region %s)", cfg.S3Region)
+	}
+	credentials, err := cfg.LoadS3Credentials()
+	if err != nil {
+		log.Printf("WARN dataset files: %v", err)
+		return nil
+	}
+	client, err := s3.New(s3.Options{
+		Endpoint:        cfg.S3Endpoint,
+		Region:          cfg.S3Region,
+		PathStyle:       cfg.S3PathStyle,
+		AccessKeyID:     credentials.AccessKeyID,
+		SecretAccessKey: credentials.SecretAccessKey,
+		SessionToken:    credentials.SessionToken,
+		HTTPClient:      &http.Client{Timeout: cfg.S3Timeout},
+	})
+	if err != nil {
+		log.Printf("WARN dataset files: %v", err)
+		return nil
+	}
+	return client
 }
 
 // newCatalogSource chooses the model-library data source. No configuration

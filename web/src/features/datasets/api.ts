@@ -2,7 +2,12 @@ import axios from 'axios'
 
 import { api, type ApiEnvelope } from '@/lib/api'
 
-import type { DatasetDetail, DatasetList } from './types'
+import type {
+  DatasetDetail,
+  DatasetDownload,
+  DatasetFiles,
+  DatasetList,
+} from './types'
 
 export class DatasetNotFoundError extends Error {
   constructor() {
@@ -35,4 +40,33 @@ export async function fetchDatasetDetail(name: string): Promise<DatasetDetail> {
     }
     throw error
   }
+}
+
+export interface DatasetFilesParams {
+  ref?: string
+  prefix?: string
+  cursor?: string
+  limit?: number
+}
+
+export async function fetchDatasetFiles(
+  name: string,
+  params: DatasetFilesParams
+): Promise<DatasetFiles> {
+  const response = await api.get<ApiEnvelope<DatasetFiles>>(
+    `/datasets/${encodeURIComponent(name)}/files`,
+    { params }
+  )
+  return unwrap(response.data)
+}
+
+export async function fetchDatasetDownloadUrl(
+  name: string,
+  params: { ref?: string; path: string }
+): Promise<DatasetDownload> {
+  const response = await api.get<ApiEnvelope<DatasetDownload>>(
+    `/datasets/${encodeURIComponent(name)}/files/download`,
+    { params }
+  )
+  return unwrap(response.data)
 }

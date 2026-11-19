@@ -287,3 +287,220 @@
     min-height: 64px;
   }
 }
+
+/* Detail: S3 file browser ------------------------------------------------ */
+
+.ml-scope .ds-files-head {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ml-scope .ds-files-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ml-muted);
+}
+
+.ml-scope .ds-files-version select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--ml-border);
+  border-radius: var(--ml-radius);
+  background: var(--ml-bg);
+  color: var(--ml-fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ml-scope .ds-files-version select:focus-visible {
+  outline: 2px solid var(--ml-accent);
+  outline-offset: 1px;
+}
+
+.ml-scope .ds-files-crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 12px 0 14px;
+  font-size: 13px;
+  color: var(--ml-muted-ink);
+}
+
+.ml-scope .ds-files-crumbs button {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ml-scope .ds-files-crumbs button:hover {
+  color: var(--ml-fg);
+  background: var(--ml-surface);
+}
+
+.ml-scope .ds-files-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ml-scope .ds-files-crumb svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ml-muted);
+}
+
+.ml-scope .ds-files-list {
+  border-top: 1px solid var(--ml-border);
+}
+
+.ml-scope .ds-files-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 130px 180px;
+  gap: 16px;
+  align-items: center;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--ml-border);
+  font-size: 13px;
+}
+
+.ml-scope .ds-files-row-head {
+  padding-block: 8px;
+  font-family: var(--ml-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ml-muted);
+}
+
+.ml-scope .ds-files-row-head span:nth-child(2),
+.ml-scope .ds-files-row-head span:nth-child(3) {
+  text-align: right;
+}
+
+.ml-scope .ds-files-name,
+.ml-scope .ds-files-name button,
+.ml-scope .ds-files-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ml-scope .ds-files-name button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ml-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ml-scope .ds-files-name button:hover span {
+  text-decoration: underline;
+}
+
+.ml-scope .ds-files-name span,
+.ml-scope .ds-files-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ml-scope .ds-files-name svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ml-accent);
+}
+
+.ml-scope .ds-files-file svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ml-muted);
+}
+
+.ml-scope .ds-files-meta {
+  text-align: right;
+  font-family: var(--ml-mono);
+  font-size: 11.5px;
+  color: var(--ml-muted);
+}
+
+.ml-scope .ds-files-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ml-scope .ds-files-download {
+  white-space: nowrap;
+}
+
+.ml-scope .ds-files-download:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ml-scope .ds-files-spin {
+  animation: ds-files-spin 0.9s linear infinite;
+}
+
+@keyframes ds-files-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ml-scope .ds-files-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+}
+
+.ml-scope .ds-files-note {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .ml-scope .ds-files-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 12px;
+  }
+
+  .ml-scope .ds-files-row-head {
+    display: none;
+  }
+
+  .ml-scope .ds-files-row > :nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .ml-scope .ds-files-row > :nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    text-align: left;
+  }
+
+  .ml-scope .ds-files-row > :nth-child(3) {
+    grid-column: 1;
+    grid-row: 3;
+    text-align: left;
+  }
+
+  .ml-scope .ds-files-row > :nth-child(4) {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: center;
+  }
+}

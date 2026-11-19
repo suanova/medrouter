@@ -170,6 +170,24 @@ spec:
                   name: {{ $secretName }}
                   key: INITIAL_ADMIN_PASSWORD
                   optional: true
+            {{- if and .Values.datasetFiles.enabled .Values.datasetFiles.credentials.existingSecret }}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.datasetFiles.credentials.existingSecret | quote }}
+                  key: {{ .Values.datasetFiles.credentials.accessKeyKey | quote }}
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.datasetFiles.credentials.existingSecret | quote }}
+                  key: {{ .Values.datasetFiles.credentials.secretKeyKey | quote }}
+            - name: S3_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.datasetFiles.credentials.existingSecret | quote }}
+                  key: {{ .Values.datasetFiles.credentials.sessionTokenKey | quote }}
+                  optional: true
+            {{- end }}
             {{- with .Values.envVars }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

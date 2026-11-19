@@ -14,7 +14,7 @@ import (
 
 func datasetRouter(source kube.Source) *gin.Engine {
 	cfg := &config.Config{DatasetLibraryCacheTTL: time.Minute, DatasetLibraryTimeout: time.Second}
-	controller := NewDatasetController(service.NewDatasetCatalog(cfg, source))
+	controller := NewDatasetController(service.NewDatasetCatalog(cfg, source), nil)
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/datasets", controller.List)

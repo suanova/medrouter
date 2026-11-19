@@ -47,6 +47,8 @@ func New(d Deps) *gin.Engine {
 	api.GET("/models/:name", d.Models.Get)
 	api.GET("/datasets", d.Datasets.List)
 	api.GET("/datasets/:name", d.Datasets.Get)
+	// Browsing is public; downloading a file requires a signed-in user.
+	api.GET("/datasets/:name/files", d.Datasets.Files)
 	api.POST("/user/register", d.Users.Register)
 	api.POST("/user/login", d.Users.Login)
 	api.POST("/user/auth/logout", d.Users.Logout)
@@ -57,6 +59,7 @@ func New(d Deps) *gin.Engine {
 	protected := api.Group("")
 	protected.Use(middleware.RequireAuth(d.Sessions))
 	protected.GET("/user/self", d.Users.Self)
+	protected.GET("/datasets/:name/files/download", d.Datasets.Download)
 
 	engine.GET(basePath+"/healthz", d.Status.Health)
 
