@@ -1,5 +1,6 @@
 import axios from 'axios'
 
+import type { FilePreview, FilePreviewParams } from '@/features/files/types'
 import { api, type ApiEnvelope } from '@/lib/api'
 
 import type {
@@ -66,6 +67,17 @@ export async function fetchDatasetDownloadUrl(
 ): Promise<DatasetDownload> {
   const response = await api.get<ApiEnvelope<DatasetDownload>>(
     `/datasets/${encodeURIComponent(name)}/files/download`,
+    { params }
+  )
+  return unwrap(response.data)
+}
+
+export async function fetchDatasetPreview(
+  name: string,
+  params: FilePreviewParams
+): Promise<FilePreview> {
+  const response = await api.get<ApiEnvelope<FilePreview>>(
+    `/datasets/${encodeURIComponent(name)}/files/preview`,
     { params }
   )
   return unwrap(response.data)

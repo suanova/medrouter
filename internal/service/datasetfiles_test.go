@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -22,10 +23,14 @@ type fakeStore struct {
 	headErr    error
 	presignErr error
 	presignURL string
+	rangeErr   error
+	objectSize int64
+	objectBody []byte
 
 	listCalls    int
 	headCalls    int
 	presignCalls int
+	rangeCalls   int
 
 	gotBucket  string
 	gotPrefix  string
@@ -33,6 +38,8 @@ type fakeStore struct {
 	gotMaxKeys int32
 	gotKey     string
 	gotTTL     time.Duration
+	gotOffset  int64
+	gotLength  int64
 }
 
 func (f *fakeStore) List(_ context.Context, bucket, prefix, _, token string, maxKeys int32) (*s3.ListPage, error) {
@@ -48,7 +55,29 @@ func (f *fakeStore) Head(_ context.Context, bucket, key string) (s3.Object, erro
 	defer f.mu.Unlock()
 	f.headCalls++
 	f.gotBucket, f.gotKey = bucket, key
-	return s3.Object{Key: key}, f.headErr
+	return s3.Object{Key: key, Size: f.objectSize}, f.headErr
+}
+
+func (f *fakeStore) GetRange(_ context.Context, bucket, key string, offset, length int64) (*s3.RangeObject, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rangeCalls++
+	f.gotBucket, f.gotKey, f.gotOffset, f.gotLength = bucket, key, offset, length
+	if f.rangeErr != nil {
+		return nil, f.rangeErr
+	}
+	start := offset
+	if start > int64(len(f.objectBody)) {
+		start = int64(len(f.objectBody))
+	}
+	end := start + length
+	if end > int64(len(f.objectBody)) {
+		end = int64(len(f.objectBody))
+	}
+	return &s3.RangeObject{
+		Body:      io.NopCloser(strings.NewReader(string(f.objectBody[start:end]))),
+		TotalSize: f.objectSize,
+	}, nil
 }
 
 func (f *fakeStore) PresignGet(_ context.Context, bucket, key string, ttl time.Duration) (string, error) {
@@ -61,11 +90,17 @@ func (f *fakeStore) PresignGet(_ context.Context, bucket, key string, ttl time.D
 
 func filesTestConfig() *config.Config {
 	return &config.Config{
-		DatasetLibraryCacheTTL: time.Minute,
-		DatasetLibraryTimeout:  time.Second,
-		S3PresignTTL:           10 * time.Minute,
-		S3ListCacheTTL:         0,
-		S3Timeout:              time.Second,
+		DatasetLibraryCacheTTL:   time.Minute,
+		DatasetLibraryTimeout:    time.Second,
+		S3PresignTTL:             10 * time.Minute,
+		S3ListCacheTTL:           0,
+		S3Timeout:                time.Second,
+		S3PreviewEnabled:         true,
+		S3PreviewTextWindow:      256 << 10,
+		S3PreviewImageMax:        10 << 20,
+		S3PreviewPDFMax:          32 << 20,
+		S3DownloadLargeThreshold: 2 << 30,
+		S3DownloadLargeTTL:       time.Hour,
 	}
 }
 
@@ -263,7 +298,7 @@ func TestDatasetFilesDownload(t *testing.T) {
 	store := &fakeStore{presignURL: "https://objects.example/x?sig=1"}
 	svc := newFilesService(t, filesTestDataset("S3", "s3://datasets/demo/2024"), store)
 
-	download, found := svc.Download(context.Background(), "demo", "", "a.csv")
+	download, found := svc.Download(context.Background(), "user-1", "demo", "", "a.csv")
 	if !found || download == nil || !download.Available {
 		t.Fatalf("download = %#v found=%v", download, found)
 	}
@@ -284,7 +319,7 @@ func TestDatasetFilesDownloadRejectsTraversal(t *testing.T) {
 
 	cases := []string{"../secret", "a/../../secret", "/etc/passwd", `a\b`, "dir/", ""}
 	for _, raw := range cases {
-		download, found := svc.Download(context.Background(), "demo", "", raw)
+		download, found := svc.Download(context.Background(), "user-1", "demo", "", raw)
 		if !found || download == nil {
 			t.Fatalf("path %q: found=%v", raw, found)
 		}
@@ -301,7 +336,7 @@ func TestDatasetFilesDownloadNotFound(t *testing.T) {
 	store := &fakeStore{headErr: &s3.Error{Reason: s3.ReasonNotFound}}
 	svc := newFilesService(t, filesTestDataset("S3", "s3://datasets/demo/2024"), store)
 
-	download, found := svc.Download(context.Background(), "demo", "", "missing.csv")
+	download, found := svc.Download(context.Background(), "user-1", "demo", "", "missing.csv")
 	if !found || download == nil || download.Available || download.Reason != s3.ReasonNotFound {
 		t.Fatalf("download = %#v found=%v", download, found)
 	}
@@ -378,5 +413,46 @@ func TestParentPrefix(t *testing.T) {
 		if got := parentPrefix(in); got != want {
 			t.Fatalf("parentPrefix(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestDatasetFilesListKeepsPathsRelativeToVersionRoot(t *testing.T) {
+	store := &fakeStore{page: &s3.ListPage{
+		Prefixes: []string{"demo/2024/figures/inner/"},
+		Objects:  []s3.Object{{Key: "demo/2024/figures/sample.png", Size: 9}},
+	}}
+	svc := newFilesService(t, filesTestDataset("S3", "s3://datasets/demo/2024"), store)
+
+	listing, found := svc.List(context.Background(), "demo", "", "figures/", "", 0)
+	if !found {
+		t.Fatal("version should exist")
+	}
+	// Paths stay rooted at the version so one entry's Path can be used directly
+	// as the `path` of a preview or download request.
+	want := map[string]string{"inner": "figures/inner/", "sample.png": "figures/sample.png"}
+	if len(listing.Entries) != len(want) {
+		t.Fatalf("entries = %+v", listing.Entries)
+	}
+	for _, entry := range listing.Entries {
+		if want[entry.Name] != entry.Path {
+			t.Fatalf("entry %q path = %q", entry.Name, entry.Path)
+		}
+	}
+}
+
+func TestDatasetFilesListSkipsDeeperObjects(t *testing.T) {
+	// Stores that ignore the delimiter must not leak grandchildren into a
+	// directory listing.
+	store := &fakeStore{page: &s3.ListPage{
+		Objects: []s3.Object{
+			{Key: "demo/2024/figures/inner/deep.png", Size: 1},
+			{Key: "demo/2024/figures/sample.png", Size: 9},
+		},
+	}}
+	svc := newFilesService(t, filesTestDataset("S3", "s3://datasets/demo/2024"), store)
+
+	listing, _ := svc.List(context.Background(), "demo", "", "figures/", "", 0)
+	if len(listing.Entries) != 1 || listing.Entries[0].Path != "figures/sample.png" {
+		t.Fatalf("entries = %+v", listing.Entries)
 	}
 }

@@ -4,6 +4,8 @@ import type {
   FileDownload,
   FileDownloadParams,
   FileListing,
+  FilePreview,
+  FilePreviewParams,
   FilesPageParams,
 } from '@/features/files/types'
 import { api, type ApiEnvelope } from '@/lib/api'
@@ -60,6 +62,17 @@ export async function fetchModelDownloadUrl(
 ): Promise<FileDownload> {
   const response = await api.get<ApiEnvelope<FileDownload>>(
     `/models/${encodeURIComponent(name)}/files/download`,
+    { params }
+  )
+  return unwrap(response.data)
+}
+
+export async function fetchModelPreview(
+  name: string,
+  params: FilePreviewParams
+): Promise<FilePreview> {
+  const response = await api.get<ApiEnvelope<FilePreview>>(
+    `/models/${encodeURIComponent(name)}/files/preview`,
     { params }
   )
   return unwrap(response.data)

@@ -96,6 +96,7 @@ type Config struct {
 	// object store; MedRouter only lists keys and signs download URLs.
 	S3Enabled            bool
 	S3Endpoint           string
+	S3PublicEndpoint     string
 	S3Region             string
 	S3PathStyle          bool
 	S3CredentialsFile    string
@@ -105,7 +106,27 @@ type Config struct {
 	S3SessionToken       string
 	S3PresignTTL         time.Duration
 	S3ListCacheTTL       time.Duration
+	S3HeadCacheTTL       time.Duration
 	S3Timeout            time.Duration
+	// S3StreamTimeout bounds one streaming response (preview content or a
+	// proxied download). It is a write deadline, not a read timeout.
+	S3StreamTimeout time.Duration
+	// S3DownloadMode is "presign" (browser talks to the object store) or
+	// "proxy" (bytes stream through MedRouter).
+	S3DownloadMode string
+
+	// S3Preview* control the in-browser preview of a single file.
+	S3PreviewEnabled     bool
+	S3PreviewTextWindow  int64
+	S3PreviewImageMax    int64
+	S3PreviewPDFMax      int64
+	S3PreviewConcurrency int
+
+	// S3Download* bound downloads. A zero limit means unlimited.
+	S3DownloadMax            int64
+	S3DownloadDailyQuota     int64
+	S3DownloadLargeThreshold int64
+	S3DownloadLargeTTL       time.Duration
 }
 
 // Load reads configuration from the environment. A .env file in the working
@@ -198,6 +219,7 @@ func Load() (*Config, error) {
 
 		S3Enabled:            boolEnv("S3_ENABLED", false),
 		S3Endpoint:           s3Endpoint,
+		S3PublicEndpoint:     strings.TrimRight(strings.TrimSpace(os.Getenv("S3_PUBLIC_ENDPOINT")), "/"),
 		S3Region:             firstNonEmpty(os.Getenv("S3_REGION"), os.Getenv("AWS_REGION"), os.Getenv("AWS_DEFAULT_REGION"), "us-east-1"),
 		S3PathStyle:          boolEnv("S3_PATH_STYLE", s3PathStyleDefault),
 		S3CredentialsFile:    firstNonEmpty(os.Getenv("S3_CREDENTIALS_FILE"), os.Getenv("AWS_SHARED_CREDENTIALS_FILE")),
@@ -207,7 +229,21 @@ func Load() (*Config, error) {
 		S3SessionToken:       firstNonEmpty(os.Getenv("S3_SESSION_TOKEN"), os.Getenv("AWS_SESSION_TOKEN")),
 		S3PresignTTL:         secondsEnv("S3_PRESIGN_TTL_SECONDS", 600),
 		S3ListCacheTTL:       secondsEnv("S3_LIST_CACHE_TTL_SECONDS", 20),
+		S3HeadCacheTTL:       secondsEnv("S3_HEAD_CACHE_TTL_SECONDS", 30),
 		S3Timeout:            secondsEnv("S3_REQUEST_TIMEOUT_SECONDS", 5),
+		S3StreamTimeout:      secondsEnv("S3_STREAM_TIMEOUT_SECONDS", 300),
+		S3DownloadMode:       downloadModeEnv(os.Getenv("S3_DOWNLOAD_MODE")),
+
+		S3PreviewEnabled:     boolEnv("S3_PREVIEW_ENABLED", true),
+		S3PreviewTextWindow:  bytesEnv("S3_PREVIEW_TEXT_WINDOW_BYTES", 256<<10),
+		S3PreviewImageMax:    bytesEnv("S3_PREVIEW_IMAGE_MAX_BYTES", 10<<20),
+		S3PreviewPDFMax:      bytesEnv("S3_PREVIEW_PDF_MAX_BYTES", 32<<20),
+		S3PreviewConcurrency: intEnv("S3_PREVIEW_CONCURRENCY", 16),
+
+		S3DownloadMax:            bytesEnv("S3_DOWNLOAD_MAX_BYTES", 50<<30),
+		S3DownloadDailyQuota:     bytesEnv("S3_DOWNLOAD_DAILY_QUOTA_BYTES", 100<<30),
+		S3DownloadLargeThreshold: bytesEnv("S3_DOWNLOAD_LARGE_THRESHOLD_BYTES", 2<<30),
+		S3DownloadLargeTTL:       secondsEnv("S3_DOWNLOAD_LARGE_TTL_SECONDS", 3600),
 	}
 
 	if cfg.SessionSecret == "" {
@@ -227,6 +263,11 @@ func Load() (*Config, error) {
 	}
 	if cfg.OAuthRedirectBase == "" {
 		cfg.OAuthRedirectBase = cfg.PublicOrigin + cfg.BasePath
+	}
+	// A text preview window above 1 MiB stops being a preview: it is then a
+	// partial download, and the response would carry that much JSON.
+	if cfg.S3PreviewTextWindow > 1<<20 {
+		cfg.S3PreviewTextWindow = 1 << 20
 	}
 
 	return cfg, nil
@@ -354,6 +395,29 @@ func intEnv(key string, fallback int) int {
 
 func secondsEnv(key string, fallback int) time.Duration {
 	return time.Duration(intEnv(key, fallback)) * time.Second
+}
+
+// bytesEnv reads a byte count. Zero is a meaningful value (unlimited), so it
+// is accepted instead of being replaced by the fallback the way intEnv does.
+func bytesEnv(key string, fallback int64) int64 {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 0 {
+		return fallback
+	}
+	return value
+}
+
+// downloadModeEnv normalizes S3_DOWNLOAD_MODE. Anything that is not "proxy"
+// falls back to presigned direct downloads.
+func downloadModeEnv(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), "proxy") {
+		return "proxy"
+	}
+	return "presign"
 }
 
 func daysEnv(key string, fallback int) time.Duration {

@@ -63,6 +63,12 @@ func New(d Deps) *gin.Engine {
 	protected.GET("/user/self", d.Users.Self)
 	protected.GET("/models/:name/files/download", d.Models.Download)
 	protected.GET("/datasets/:name/files/download", d.Datasets.Download)
+	// Preview transfers file content, so it is gated like a download; the
+	// listing above stays public.
+	protected.GET("/models/:name/files/preview", d.Models.Preview)
+	protected.GET("/models/:name/files/content", d.Models.Content)
+	protected.GET("/datasets/:name/files/preview", d.Datasets.Preview)
+	protected.GET("/datasets/:name/files/content", d.Datasets.Content)
 
 	engine.GET(basePath+"/healthz", d.Status.Health)
 

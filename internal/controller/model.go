@@ -73,23 +73,24 @@ func (h *ModelController) Files(c *gin.Context) {
 // Download signs a short-lived GET URL for one model file. The route sits
 // behind RequireAuth, so the caller is a signed-in user.
 func (h *ModelController) Download(c *gin.Context) {
-	if h.files == nil {
-		common.Fail(c, common.NewAPIErrorStatus(http.StatusServiceUnavailable, service.FilesDisabled, "File browsing is disabled"))
-		return
-	}
-	download, found := h.files.Download(c.Request.Context(), c.Param("name"), c.Query("ref"), c.Query("path"))
-	if !found {
-		common.Fail(c, common.NewAPIErrorStatus(http.StatusNotFound, "MODEL_VERSION_NOT_FOUND", "Model version not found"))
-		return
-	}
-	if !download.Available {
-		status, code := downloadErrorStatus(download.Reason)
-		message := download.Message
-		if message == "" {
-			message = "The file could not be downloaded."
-		}
-		common.Fail(c, common.NewAPIErrorStatus(status, code, message))
-		return
-	}
-	common.Success(c, download)
+	downloadFile(c, h.files, fileNotFound{
+		code:    "MODEL_VERSION_NOT_FOUND",
+		message: "Model version not found",
+	})
+}
+
+// Preview describes one model file and, for text, returns its first window.
+func (h *ModelController) Preview(c *gin.Context) {
+	previewFile(c, h.files, fileNotFound{
+		code:    "MODEL_VERSION_NOT_FOUND",
+		message: "Model version not found",
+	})
+}
+
+// Content streams an image or PDF so the object store stays private.
+func (h *ModelController) Content(c *gin.Context) {
+	contentFile(c, h.files, fileNotFound{
+		code:    "MODEL_VERSION_NOT_FOUND",
+		message: "Model version not found",
+	})
 }

@@ -73,25 +73,26 @@ func (h *DatasetController) Files(c *gin.Context) {
 // Download signs a short-lived GET URL for one file. The route sits behind
 // RequireAuth, so the caller is a signed-in user.
 func (h *DatasetController) Download(c *gin.Context) {
-	if h.files == nil {
-		common.Fail(c, common.NewAPIErrorStatus(http.StatusServiceUnavailable, service.FilesDisabled, "Dataset file browsing is disabled"))
-		return
-	}
-	download, found := h.files.Download(c.Request.Context(), c.Param("name"), c.Query("ref"), c.Query("path"))
-	if !found {
-		common.Fail(c, common.NewAPIErrorStatus(http.StatusNotFound, "DATASET_VERSION_NOT_FOUND", "Dataset version not found"))
-		return
-	}
-	if !download.Available {
-		status, code := downloadErrorStatus(download.Reason)
-		message := download.Message
-		if message == "" {
-			message = "The file could not be downloaded."
-		}
-		common.Fail(c, common.NewAPIErrorStatus(status, code, message))
-		return
-	}
-	common.Success(c, download)
+	downloadFile(c, h.files, fileNotFound{
+		code:    "DATASET_VERSION_NOT_FOUND",
+		message: "Dataset version not found",
+	})
+}
+
+// Preview describes one dataset file and, for text, returns its first window.
+func (h *DatasetController) Preview(c *gin.Context) {
+	previewFile(c, h.files, fileNotFound{
+		code:    "DATASET_VERSION_NOT_FOUND",
+		message: "Dataset version not found",
+	})
+}
+
+// Content streams an image or PDF so the object store stays private.
+func (h *DatasetController) Content(c *gin.Context) {
+	contentFile(c, h.files, fileNotFound{
+		code:    "DATASET_VERSION_NOT_FOUND",
+		message: "Dataset version not found",
+	})
 }
 
 // downloadErrorStatus maps a stable file reason onto an appropriate HTTP
@@ -102,6 +103,10 @@ func downloadErrorStatus(reason string) (int, string) {
 		return http.StatusBadRequest, service.FilesInvalidPath
 	case service.FilesNotFound:
 		return http.StatusNotFound, "FILE_NOT_FOUND"
+	case service.FilesTooLarge:
+		return http.StatusRequestEntityTooLarge, service.FilesTooLarge
+	case service.FilesQuotaExceeded:
+		return http.StatusTooManyRequests, service.FilesQuotaExceeded
 	case service.FilesDisabled, service.FilesUnsupportedStorage, service.FilesURIMissing:
 		return http.StatusServiceUnavailable, reason
 	case service.FilesAuth:

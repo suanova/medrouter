@@ -1,6 +1,6 @@
 import { FileBrowserPanel } from '@/features/files/file-browser-panel'
 
-import { fetchDatasetDownloadUrl, fetchDatasetFiles } from '../api'
+import { fetchDatasetDownloadUrl, fetchDatasetFiles, fetchDatasetPreview } from '../api'
 import type { DatasetDetail } from '../types'
 
 interface DatasetFilesPanelProps {
@@ -17,6 +17,7 @@ export function DatasetFilesPanel({ detail }: DatasetFilesPanelProps) {
       tabPrefix='ds'
       fetchPage={(params) => fetchDatasetFiles(detail.dataset, params)}
       fetchDownload={(params) => fetchDatasetDownloadUrl(detail.dataset, params)}
+      fetchPreview={(params) => fetchDatasetPreview(detail.dataset, params)}
     />
   )
 }

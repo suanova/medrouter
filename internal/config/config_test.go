@@ -31,6 +31,11 @@ var envKeys = []string{
 	"S3_CREDENTIALS_FILE", "S3_CREDENTIALS_PROFILE",
 	"S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_SESSION_TOKEN",
 	"S3_PRESIGN_TTL_SECONDS", "S3_LIST_CACHE_TTL_SECONDS", "S3_REQUEST_TIMEOUT_SECONDS",
+	"S3_PUBLIC_ENDPOINT", "S3_HEAD_CACHE_TTL_SECONDS", "S3_STREAM_TIMEOUT_SECONDS",
+	"S3_DOWNLOAD_MODE", "S3_PREVIEW_ENABLED",
+	"S3_PREVIEW_TEXT_WINDOW_BYTES", "S3_PREVIEW_IMAGE_MAX_BYTES", "S3_PREVIEW_PDF_MAX_BYTES",
+	"S3_PREVIEW_CONCURRENCY", "S3_DOWNLOAD_MAX_BYTES", "S3_DOWNLOAD_DAILY_QUOTA_BYTES",
+	"S3_DOWNLOAD_LARGE_THRESHOLD_BYTES", "S3_DOWNLOAD_LARGE_TTL_SECONDS",
 	"AWS_REGION", "AWS_DEFAULT_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
 	"AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE",
 }
@@ -122,6 +127,18 @@ func TestS3Config(t *testing.T) {
 	if cfg.S3PresignTTL.Seconds() != 600 || cfg.S3ListCacheTTL.Seconds() != 20 || cfg.S3Timeout.Seconds() != 5 {
 		t.Fatalf("S3 durations = %s/%s/%s", cfg.S3PresignTTL, cfg.S3ListCacheTTL, cfg.S3Timeout)
 	}
+	if !cfg.S3PreviewEnabled || cfg.S3PreviewTextWindow != 256<<10 {
+		t.Fatalf("preview defaults = %+v", cfg)
+	}
+	if cfg.S3PreviewImageMax != 10<<20 || cfg.S3PreviewPDFMax != 32<<20 || cfg.S3PreviewConcurrency != 16 {
+		t.Fatalf("preview limits = %+v", cfg)
+	}
+	if cfg.S3DownloadMax != 50<<30 || cfg.S3DownloadDailyQuota != 100<<30 {
+		t.Fatalf("download limits = %+v", cfg)
+	}
+	if cfg.S3DownloadMode != "presign" || cfg.S3PublicEndpoint != "" {
+		t.Fatalf("download channel = %q/%q", cfg.S3DownloadMode, cfg.S3PublicEndpoint)
+	}
 
 	t.Setenv("S3_ENABLED", "true")
 	t.Setenv("S3_ENDPOINT", "http://10.66.2.1:30880/")
@@ -133,6 +150,11 @@ func TestS3Config(t *testing.T) {
 	t.Setenv("S3_PRESIGN_TTL_SECONDS", "900")
 	t.Setenv("S3_LIST_CACHE_TTL_SECONDS", "15")
 	t.Setenv("S3_REQUEST_TIMEOUT_SECONDS", "7")
+	t.Setenv("S3_PUBLIC_ENDPOINT", "https://s3-cn-sh2.example.com/")
+	t.Setenv("S3_DOWNLOAD_MODE", "proxy")
+	t.Setenv("S3_PREVIEW_TEXT_WINDOW_BYTES", "4096")
+	t.Setenv("S3_PREVIEW_IMAGE_MAX_BYTES", "0")
+	t.Setenv("S3_DOWNLOAD_MAX_BYTES", "0")
 
 	cfg, err = Load()
 	if err != nil {
@@ -140,6 +162,12 @@ func TestS3Config(t *testing.T) {
 	}
 	if !cfg.S3Enabled || cfg.S3Endpoint != "http://10.66.2.1:30880" || cfg.S3Region != "cn-east-1" || cfg.S3PathStyle {
 		t.Fatalf("S3 config = %+v", cfg)
+	}
+	if cfg.S3PublicEndpoint != "https://s3-cn-sh2.example.com" || cfg.S3DownloadMode != "proxy" {
+		t.Fatalf("download channel = %q/%q", cfg.S3DownloadMode, cfg.S3PublicEndpoint)
+	}
+	if cfg.S3PreviewTextWindow != 4096 || cfg.S3PreviewImageMax != 0 || cfg.S3DownloadMax != 0 {
+		t.Fatalf("explicit limits = %+v", cfg)
 	}
 	if cfg.S3PresignTTL.Seconds() != 900 || cfg.S3ListCacheTTL.Seconds() != 15 || cfg.S3Timeout.Seconds() != 7 {
 		t.Fatalf("S3 durations = %s/%s/%s", cfg.S3PresignTTL, cfg.S3ListCacheTTL, cfg.S3Timeout)

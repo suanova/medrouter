@@ -253,3 +253,75 @@ func TestNewAllowsDefaultAWSEndpoint(t *testing.T) {
 		t.Fatalf("path = %q", parsed.Path)
 	}
 }
+
+func TestGetRangeSendsRangeHeaderAndReportsTotal(t *testing.T) {
+	var gotRange string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRange = r.Header.Get("Range")
+		w.Header().Set("Content-Range", "bytes 10-13/100")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("ETag", `"etag-1"`)
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte("abcd"))
+	}))
+	defer server.Close()
+
+	client := testClient(t, server.URL)
+	object, err := client.GetRange(context.Background(), "datasets", "demo/a.txt", 10, 4)
+	if err != nil {
+		t.Fatalf("GetRange: %v", err)
+	}
+	defer func() { _ = object.Body.Close() }()
+
+	if gotRange != "bytes=10-13" {
+		t.Fatalf("range header = %q", gotRange)
+	}
+	if object.TotalSize != 100 {
+		t.Fatalf("total size = %d", object.TotalSize)
+	}
+	if object.ContentType != "text/plain" || object.ETag != "etag-1" {
+		t.Fatalf("metadata = %q/%q", object.ContentType, object.ETag)
+	}
+}
+
+func TestGetRangeRejectsNonPositiveLength(t *testing.T) {
+	client := testClient(t, "https://s3.example.com")
+	if _, err := client.GetRange(context.Background(), "b", "k", 0, 0); err == nil {
+		t.Fatal("expected an error for a zero length")
+	}
+}
+
+func TestPresignGetUsesPublicEndpoint(t *testing.T) {
+	client, err := New(Options{
+		Endpoint:        "http://10.66.2.1:30880",
+		PublicEndpoint:  "https://s3-cn-sh2.example.com",
+		Region:          "cn-sh2",
+		PathStyle:       true,
+		AccessKeyID:     "key",
+		SecretAccessKey: "secret",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	raw, err := client.PresignGet(context.Background(), "models", "qwen/config.json", 10*time.Minute)
+	if err != nil {
+		t.Fatalf("PresignGet: %v", err)
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if parsed.Host != "s3-cn-sh2.example.com" || parsed.Path != "/models/qwen/config.json" {
+		t.Fatalf("signed URL = %s", raw)
+	}
+}
+
+func TestNewRejectsInvalidPublicEndpoint(t *testing.T) {
+	_, err := New(Options{
+		Endpoint:       "http://10.66.2.1:30880",
+		PublicEndpoint: "ftp://s3.example.com",
+	})
+	if err == nil {
+		t.Fatal("expected an error for a non-http public endpoint")
+	}
+}

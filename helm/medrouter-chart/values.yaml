@@ -76,11 +76,12 @@ datasetLibrary:
 # ---------------------------------------------------------------------------
 # Dataset and model files (S3)
 #
-# The dataset and model "Files" tabs list object keys and sign short-lived
-# download URLs; bytes never pass through MedRouter. Each Dataset or
-# ModelVersion CR declares its own s3://bucket/prefix, so this block only
-# carries the endpoint and a read-only credential. Browsing is public;
-# downloads require a signed-in user.
+# The dataset and model "Files" tabs list object keys, preview one file and
+# download it. Each Dataset or ModelVersion CR declares its own
+# s3://bucket/prefix, so this block only carries the endpoint and a read-only
+# credential. Browsing is public; preview and download require a signed-in
+# user. Bytes leave the cluster directly in presign mode and pass through
+# MedRouter in proxy mode.
 # ---------------------------------------------------------------------------
 datasetFiles:
   enabled: false
@@ -88,6 +89,10 @@ datasetFiles:
   # (Ceph RGW) or https://s3.example.com. Leave empty on real AWS to use the
   # standard endpoint for the region.
   endpoint: ""
+  # Optional public or CDN hostname used only to sign download URLs. Set this
+  # when endpoint is an internal address (for example US3's internal.s3-*)
+  # that the browser cannot reach.
+  publicEndpoint: ""
   region: us-east-1
   # Ceph RGW and most self-hosted stores need path-style addressing. Set to
   # false on real AWS (virtual-hosted style).
@@ -109,7 +114,30 @@ datasetFiles:
   presignTTLSeconds: 600
   # Directory listing cache and per-request object-store timeout.
   listCacheTTLSeconds: 20
+  headCacheTTLSeconds: 30
   requestTimeoutSeconds: 5
+  # Write deadline for a streaming preview or proxied download.
+  streamTimeoutSeconds: 300
+  # presign: the browser fetches the signed URL from the object store.
+  # proxy:   bytes stream through MedRouter (use when the store is private or
+  #          its token is restricted to the cluster's egress IPs).
+  downloadMode: presign
+  preview:
+    enabled: true
+    # Text previews read at most this many bytes from the head of a file; the
+    # cost is the same for a 2 KB config and a 10 GB JSONL.
+    textWindowBytes: 262144
+    imageMaxBytes: 10485760
+    pdfMaxBytes: 33554432
+    concurrency: 16
+  download:
+    # Per-file and per-user 24h limits. 0 disables a limit.
+    maxBytes: 53687091200
+    dailyQuotaBytes: 107374182400
+    # Files above the threshold get a longer presign TTL so an interrupted
+    # transfer can be resumed.
+    largeThresholdBytes: 2147483648
+    largeTTLSeconds: 3600
 
 # Keep at 1 with SQLite: a SQLite file cannot be shared between pods. The
 # chart rejects replicaCount > 1 in SQLite mode. PostgreSQL modes can scale.
