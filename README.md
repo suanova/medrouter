@@ -336,17 +336,29 @@ Helm 配置（`datasetFiles.*`）：
 ```yaml
 datasetFiles:
   enabled: true
-  endpoint: http://10.66.2.1:30880
-  region: us-east-1
+  # 集群 → 对象存储：列表、元数据、预览读取
+  endpoint: http://internal.s3-cn-sh2.ufileos.com
+  # 浏览器 → 对象存储：只用于签名下载 URL；单端点部署可留空
+  publicEndpoint: https://s3-cn-sh2.ufileos.com
+  region: cn-sh2          # 必须与端点一致，US3 用 region code
   pathStyle: true
   credentials:
     # 在 release 命名空间预先创建，包含下面两个 key（只读权限即可）
     existingSecret: medrouter-s3-credentials
     accessKeyKey: S3_ACCESS_KEY_ID
     secretKeyKey: S3_SECRET_ACCESS_KEY
+  # downloadMode: proxy   # 对象存储不可公网访问时，字节经 MedRouter 转发
+  preview:
+    enabled: true
+    textWindowBytes: 262144     # 文本预览窗口
+    imageMaxBytes: 10485760
+    pdfMaxBytes: 33554432
+  download:
+    maxBytes: 53687091200       # 单文件 50 GiB
+    dailyQuotaBytes: 107374182400
 ```
 
-也可以把 AWS shared credentials 文件通过 `extraVolumes` 挂载，并设置 `datasetFiles.credentialsFile`；此时不需要 `existingSecret`。`cubestack-system/cubestack-s3-credentials` 的 `credentials` key 就是这种格式，但跨命名空间不能直接挂载，需要复制到 MedRouter 的命名空间或另建只读凭据。
+完整说明（端点选择、UFile/US3 域名区别、大小上限、排查）见 [`helm/medrouter-chart/README.md`](helm/medrouter-chart/README.md#文件浏览与在线预览s3)。也可以把 AWS shared credentials 文件通过 `extraVolumes` 挂载，并设置 `datasetFiles.credentialsFile`；此时不需要 `existingSecret`。`cubestack-system/cubestack-s3-credentials` 的 `credentials` key 就是这种格式，但跨命名空间不能直接挂载，需要复制到 MedRouter 的命名空间或另建只读凭据。
 
 ## API 概览
 
