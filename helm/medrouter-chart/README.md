@@ -333,6 +333,102 @@ helm install medrouter ./helm/medrouter-chart -n medrouter \
 
 没有安装 CubeStack CRD 或缺少 RBAC 时，MedRouter 仍能正常启动，`/api/models` / `/api/datasets` 返回 HTTP 200 且 `available:false`，页面按原因显示 `CRD_MISSING` / `FORBIDDEN` 等不可用状态。
 
+## 文件浏览与在线预览（S3）
+
+`/models` 和 `/datasets` 详情页的 **Files** tab 会按 `ModelVersion` / `Dataset` 的 `spec.storage.s3.uri` 列出对象存储里的文件，并支持"打开"（预览）和下载。列表是公开的，**预览和下载需要登录**。
+
+### 前置条件
+
+1. 版本必须是 `storage.strategy: S3` 且 `spec.storage.s3.uri` 非空（如 `s3://medrouter/datasets/pubmedqa/pqa-1.0`）；HostPath / PVC 版本会显示"不可在线浏览"。
+2. 在 **release 命名空间**准备一个只读凭据 Secret：
+
+   ```bash
+   kubectl -n medrouter create secret generic medrouter-s3-credentials \
+     --from-literal=S3_ACCESS_KEY_ID=... \
+     --from-literal=S3_SECRET_ACCESS_KEY=...
+     # 可选：--from-literal=S3_SESSION_TOKEN=...
+   ```
+
+   键名由 `datasetFiles.credentials.accessKeyKey` 等决定，默认就是上面三个。**凭据不能省**：预签名必须有密钥，匿名凭据只能浏览和预览，下载会返回 `S3_UNAVAILABLE`。
+
+3. 凭据至少需要 `list`（浏览）和 `get`（下载/预览）。US3 的令牌支持"授权文件前缀"，可以只授权需要的 bucket/前缀。
+
+### 最少需要设置的值
+
+```yaml
+datasetFiles:
+  enabled: true
+  endpoint: "https://s3-cn-sh2.ufileos.com"     # 集群访问对象存储的端点
+  credentials:
+    existingSecret: medrouter-s3-credentials
+```
+
+`pathStyle` 在设置 `endpoint` 时默认为 `true`，`region` 默认 `us-east-1`。S3 兼容存储通常要改成实际 region，例如 US3 的 `cn-sh2`——region 参与 SigV4 签名，写错会得到 `SignatureDoesNotMatch`。
+
+### 端点：内网与外网
+
+浏览器必须能直接访问签名后的 URL，所以签名所用的主机名和集群访问用的主机名往往是两个：
+
+```yaml
+datasetFiles:
+  enabled: true
+  endpoint: "http://internal.s3-cn-sh2.ufileos.com"   # 集群 → 对象存储：列表、元数据、预览读取
+  publicEndpoint: "https://s3-cn-sh2.ufileos.com"     # 浏览器 → 对象存储：仅用于签名下载 URL
+  region: cn-sh2
+  pathStyle: true
+  credentials:
+    existingSecret: medrouter-s3-credentials
+```
+
+- `endpoint` 只在服务端使用，可以是内网地址；`publicEndpoint` 只参与签名，必须是用户浏览器可达的公网或 CDN 域名。留空则回落到 `endpoint`（单端点部署）。
+- `endpoint` 填内网地址却漏配 `publicEndpoint` 时，下载 URL 会指向内网主机：浏览器打不开，服务端日志却一切正常。
+
+### 对象存储不可公网访问时
+
+```yaml
+datasetFiles:
+  enabled: true
+  endpoint: "http://10.66.2.1:30880"
+  downloadMode: proxy        # 字节经 MedRouter 同源转发，不再签发直连 URL
+```
+
+`proxy` 模式下预览和下载都走同一个 content 端点，代价是 Pod 出带宽。预览和下载共用 `preview.concurrency` 个并发槽位，不要用它承载几十 GB 文件的并发下载。
+
+### 大小上限
+
+| 值 | 默认 | 说明 |
+|---|---|---|
+| `datasetFiles.preview.enabled` | `true` | 关闭后"打开"按钮消失，接口返回 `PREVIEW_DISABLED` |
+| `datasetFiles.preview.textWindowBytes` | `262144` | 文本预览一次读取的窗口；成本与文件大小无关，上限 1 MiB |
+| `datasetFiles.preview.imageMaxBytes` | `10485760` | 可预览图片的大小上限 |
+| `datasetFiles.preview.pdfMaxBytes` | `33554432` | 可预览 PDF 的大小上限 |
+| `datasetFiles.preview.concurrency` | `16` | 同时进行的预览流数量 |
+| `datasetFiles.download.maxBytes` | `53687091200` | 单文件下载上限（50 GiB）；`0` 不限 |
+| `datasetFiles.download.dailyQuotaBytes` | `107374182400` | 单用户 24h 下载配额（100 GiB）；`0` 不限 |
+| `datasetFiles.download.largeThresholdBytes` | `2147483648` | 超过此大小使用更长的下载 URL TTL |
+| `datasetFiles.download.largeTTLSeconds` | `3600` | 大文件的下载 URL TTL |
+
+超过 `download.maxBytes` 返回 `FILE_TOO_LARGE`（413），超过配额返回 `DOWNLOAD_QUOTA_EXCEEDED`（429）。配额是进程内内存计数：重启清零，多副本不共享，与 `RateLimiter` 同样的取舍。
+
+### 验证
+
+```bash
+# 列表不需要登录；available:true 且有 entries 说明端点与凭据都对
+curl -s "https://<site>/medrouter/api/datasets/<name>/files?ref=<ref>" | jq '.data.available, .data.reason'
+
+# 预览和下载需要会话
+curl -s -b cookie.txt "https://<site>/medrouter/api/datasets/<name>/files/preview?path=README.md" | jq '.data.kind, .data.previewable'
+```
+
+常见 `reason`：`S3_DISABLED`（未启用）、`S3_URI_MISSING`（版本没声明 URI）、`S3_AUTH`（凭据被拒）、`S3_UNAVAILABLE`（端点不可达或签名失败）、`PREVIEW_UNSUPPORTED_FORMAT`（二进制格式）。
+
+### 排查
+
+- **列表报 `S3_AUTH`**：凭据的 bucket 归属不对。US3 要求 bucket 的创建账户与密钥拥有者一致。
+- **下载 URL 主机不对**：检查是否漏配 `publicEndpoint`。
+- **`SignatureDoesNotMatch`**：`region` 与端点不匹配。
+- **配了内网域名却一直 401 / 返回 JSON 错误**：确认它是 S3 协议端点。US3 的内网 S3 域名形如 `internal.s3-<region>.<domain>`；`<bucket>.internal-<region>-01.<domain>` 是 UFile 原生 API，不认 SigV4，不能填进 `endpoint`。
+
 ## 常用配置
 
 | 值 | 默认 | 说明 |
@@ -367,6 +463,14 @@ helm install medrouter ./helm/medrouter-chart -n medrouter \
 | `config.TRUSTED_PROXIES` | 空 | 反向代理 CIDR，逗号分隔，用于取得真实客户端 IP |
 | `config.REGISTER_ENABLED` | `"true"` | 是否开放注册 |
 | `config.INITIAL_ADMIN_USERNAME` | 空 | 首次启动创建 root 账号的用户名 |
+| `datasetFiles.enabled` | `false` | 启用模型/数据集文件浏览、预览与下载（需配合 `endpoint` 与凭据 Secret） |
+| `datasetFiles.endpoint` | 空 | 集群访问对象存储的端点，如 `http://internal.s3-cn-sh2.ufileos.com` |
+| `datasetFiles.publicEndpoint` | 空 | 仅用于签名下载 URL 的公网/CDN 域名；空则回落到 `endpoint` |
+| `datasetFiles.region` | `us-east-1` | SigV4 region，需与端点一致（US3 如 `cn-sh2`） |
+| `datasetFiles.pathStyle` | 设置 `endpoint` 时 `true` | 路径风格寻址 |
+| `datasetFiles.credentials.existingSecret` | 空 | 存放 `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` 的 Secret 名 |
+| `datasetFiles.downloadMode` | `presign` | `presign` 浏览器直连对象存储；`proxy` 字节经 MedRouter 转发 |
+| `datasetFiles.preview.*` / `download.*` | 见上文 | 预览窗口与大小上限、下载上限与配额 |
 | `ingress.enabled` | `false` | 是否创建 Ingress |
 | `gateway.enabled` | `true` | 是否创建 Gateway API HTTPRoute（CubeStack 平台） |
 | `gateway.parent.name` | `cubestack-gateway` | HTTPRoute 挂载的平台 Gateway 名 |
