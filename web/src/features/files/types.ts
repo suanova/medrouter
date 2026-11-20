@@ -38,8 +38,37 @@ export interface FileDownload {
   reason?: string
   message?: string
   retryable: boolean
+  /** presign: fetch url directly; proxy: fetch the content endpoint. */
+  mode?: 'presign' | 'proxy'
+  size: number
   url?: string
   expires_at?: string
+}
+
+/**
+ * One file described for preview. Text arrives inline (at most window_bytes);
+ * image and pdf point at the same-origin content endpoint so the object store
+ * stays private.
+ */
+export interface FilePreview {
+  available: boolean
+  reason?: string
+  message?: string
+  retryable: boolean
+  kind: 'text' | 'image' | 'pdf' | 'unsupported'
+  previewable: boolean
+  size: number
+  content_type?: string
+  content?: string
+  encoding?: string
+  truncated: boolean
+  window_bytes?: number
+  content_url?: string
+}
+
+export interface FilePreviewParams {
+  ref?: string
+  path: string
 }
 
 export interface FileBrowserVersion {

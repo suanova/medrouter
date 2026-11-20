@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/suanova/medrouter/internal/common"
 	"github.com/suanova/medrouter/internal/config"
 	"github.com/suanova/medrouter/internal/controller"
 	"github.com/suanova/medrouter/internal/kube"
@@ -47,8 +48,14 @@ func main() {
 	catalog := service.NewModelCatalog(cfg, newCatalogSource(cfg))
 	datasetCatalog := service.NewDatasetCatalog(cfg, newDatasetSource(cfg))
 	objectStore := newObjectStore(cfg)
-	modelFiles := service.NewFilesService(cfg, catalog, objectStore)
-	datasetFiles := service.NewFilesService(cfg, datasetCatalog, objectStore)
+	// The preview limiter and the download quota are per process, so both
+	// libraries must share one instance; two would double the limits.
+	fileLimiter := service.NewLimiter(cfg.S3PreviewConcurrency)
+	fileQuota := common.NewByteQuota(cfg.S3DownloadDailyQuota, 24*time.Hour)
+	modelFiles := service.NewFilesService(cfg, catalog, objectStore,
+		service.WithLimiter(fileLimiter), service.WithQuota(fileQuota))
+	datasetFiles := service.NewFilesService(cfg, datasetCatalog, objectStore,
+		service.WithLimiter(fileLimiter), service.WithQuota(fileQuota))
 
 	userController := controller.NewUserController(cfg, users, sessions)
 	verificationController := controller.NewVerificationController(verification)
@@ -154,19 +161,30 @@ func newObjectStore(cfg *config.Config) service.ObjectStore {
 		return nil
 	}
 	client, err := s3.New(s3.Options{
-		Endpoint:        cfg.S3Endpoint,
-		Region:          cfg.S3Region,
-		PathStyle:       cfg.S3PathStyle,
-		AccessKeyID:     credentials.AccessKeyID,
-		SecretAccessKey: credentials.SecretAccessKey,
-		SessionToken:    credentials.SessionToken,
-		HTTPClient:      &http.Client{Timeout: cfg.S3Timeout},
+		Endpoint:         cfg.S3Endpoint,
+		PublicEndpoint:   cfg.S3PublicEndpoint,
+		Region:           cfg.S3Region,
+		PathStyle:        cfg.S3PathStyle,
+		AccessKeyID:      credentials.AccessKeyID,
+		SecretAccessKey:  credentials.SecretAccessKey,
+		SessionToken:     credentials.SessionToken,
+		HTTPClient:       &http.Client{Timeout: cfg.S3Timeout},
+		StreamHTTPClient: newStreamHTTPClient(cfg.S3Timeout),
 	})
 	if err != nil {
 		log.Printf("WARN dataset files: %v", err)
 		return nil
 	}
 	return client
+}
+
+// newStreamHTTPClient builds the client used for ranged reads. It must not
+// carry a total Timeout: that value also bounds reading the response body, and
+// a preview or PDF stream legitimately outlives a metadata call.
+func newStreamHTTPClient(headerTimeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = headerTimeout
+	return &http.Client{Transport: transport}
 }
 
 // newCatalogSource chooses the model-library data source. No configuration

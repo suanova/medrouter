@@ -598,6 +598,8 @@ func TestModelDownloadRequiresAuth(t *testing.T) {
 	// Downloading is not.
 	resp, env = app.request(http.MethodGet, "/api/models/demo/files/download?path=config.json", nil)
 	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "model download without a session")
+	resp, env = app.request(http.MethodGet, "/api/models/demo/files/preview?path=config.json", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "model preview without a session")
 }
 
 func TestDatasetDownloadRequiresAuth(t *testing.T) {
@@ -613,6 +615,12 @@ func TestDatasetDownloadRequiresAuth(t *testing.T) {
 	// Downloading is not.
 	resp, env = app.request(http.MethodGet, "/api/datasets/demo/files/download?path=a.csv", nil)
 	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "download without a session")
+
+	// Preview transfers content, so it is gated like a download.
+	resp, env = app.request(http.MethodGet, "/api/datasets/demo/files/preview?path=a.csv", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "preview without a session")
+	resp, env = app.request(http.MethodGet, "/api/datasets/demo/files/content?path=plot.png", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "content without a session")
 }
 
 func TestCustomAPIPrefix(t *testing.T) {

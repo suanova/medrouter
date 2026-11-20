@@ -153,7 +153,7 @@ func TestModelFilesDownload(t *testing.T) {
 		modelVersionFixture("demo-2024", "demo", "2024", "S3", "s3://models/demo/2024"),
 	}, store)
 
-	download, found := svc.Download(context.Background(), "demo", "", "config.json")
+	download, found := svc.Download(context.Background(), "user-1", "demo", "", "config.json")
 	if !found || download == nil || !download.Available {
 		t.Fatalf("download = %#v found=%v", download, found)
 	}

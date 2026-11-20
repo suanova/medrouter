@@ -11,9 +11,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,36 +73,56 @@ type ListPage struct {
 	Truncated bool
 }
 
+// RangeObject is a partial read of one object. Body must be closed by the
+// caller; TotalSize is the size of the whole object, not of Body.
+type RangeObject struct {
+	Body        io.ReadCloser
+	TotalSize   int64
+	ContentType string
+	ETag        string
+}
+
 // Options configures a Client. Endpoint is optional: leave it empty to use the
 // standard AWS S3 endpoint for Region (for example on real AWS), or set it to
 // an absolute http(s) URL for Ceph RGW and other S3-compatible stores.
 type Options struct {
-	Endpoint        string
-	Region          string
-	PathStyle       bool
+	Endpoint  string
+	Region    string
+	PathStyle bool
+	// PublicEndpoint, when set, is used only to sign presigned URLs. List, Head
+	// and GetRange keep using Endpoint, which can stay on the internal network
+	// while browsers reach the signed URL through a public or CDN hostname.
+	PublicEndpoint  string
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
-	HTTPClient      *http.Client
+	// HTTPClient is used for metadata calls (List, Head) and for presigning.
+	HTTPClient *http.Client
+	// StreamHTTPClient is used for GetRange only. It should not carry a total
+	// request timeout: a timeout there aborts a body that is still being read.
+	// Leave nil to reuse HTTPClient.
+	StreamHTTPClient *http.Client
 }
 
 // Client talks to one S3-compatible endpoint.
 type Client struct {
 	core    *awss3.Client
+	stream  *awss3.Client
 	presign *awss3.PresignClient
 }
 
 // New validates the options and builds a client. Empty credentials mean
 // anonymous access, which only works for public buckets.
 func New(opts Options) (*Client, error) {
-	endpoint := strings.TrimRight(strings.TrimSpace(opts.Endpoint), "/")
-	if endpoint != "" {
-		parsed, err := url.Parse(endpoint)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return nil, fmt.Errorf("s3 endpoint must be an absolute http(s) URL")
-		}
-		if parsed.Scheme != "http" && parsed.Scheme != "https" {
-			return nil, fmt.Errorf("s3 endpoint must use http or https")
+	endpoint, err := normalizeEndpoint(opts.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	presignEndpoint := endpoint
+	if strings.TrimSpace(opts.PublicEndpoint) != "" {
+		presignEndpoint, err = normalizeEndpoint(opts.PublicEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("s3 public endpoint: %w", err)
 		}
 	}
 
@@ -119,20 +141,53 @@ func New(opts Options) (*Client, error) {
 		provider = credentials.NewStaticCredentialsProvider(accessKey, secretKey, strings.TrimSpace(opts.SessionToken))
 	}
 
-	cfg := aws.Config{
-		Region:      region,
-		Credentials: provider,
-	}
-	if opts.HTTPClient != nil {
-		cfg.HTTPClient = opts.HTTPClient
-	}
-	core := awss3.NewFromConfig(cfg, func(o *awss3.Options) {
-		if endpoint != "" {
-			o.BaseEndpoint = aws.String(endpoint)
+	newCore := func(endpoint string, httpClient *http.Client) *awss3.Client {
+		cfg := aws.Config{
+			Region:      region,
+			Credentials: provider,
 		}
-		o.UsePathStyle = opts.PathStyle
-	})
-	return &Client{core: core, presign: awss3.NewPresignClient(core)}, nil
+		if httpClient != nil {
+			cfg.HTTPClient = httpClient
+		}
+		return awss3.NewFromConfig(cfg, func(o *awss3.Options) {
+			if endpoint != "" {
+				o.BaseEndpoint = aws.String(endpoint)
+			}
+			o.UsePathStyle = opts.PathStyle
+		})
+	}
+
+	streamHTTP := opts.StreamHTTPClient
+	if streamHTTP == nil {
+		streamHTTP = opts.HTTPClient
+	}
+	core := newCore(endpoint, opts.HTTPClient)
+	presignCore := core
+	if presignEndpoint != endpoint {
+		presignCore = newCore(presignEndpoint, opts.HTTPClient)
+	}
+
+	return &Client{
+		core:    core,
+		stream:  newCore(endpoint, streamHTTP),
+		presign: awss3.NewPresignClient(presignCore),
+	}, nil
+}
+
+// normalizeEndpoint validates an optional absolute http(s) URL.
+func normalizeEndpoint(raw string) (string, error) {
+	endpoint := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if endpoint == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("s3 endpoint must be an absolute http(s) URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("s3 endpoint must use http or https")
+	}
+	return endpoint, nil
 }
 
 // List returns one level of bucket contents under prefix. A non-empty
@@ -199,6 +254,49 @@ func (c *Client) Head(ctx context.Context, bucket, key string) (Object, error) {
 	}, nil
 }
 
+// GetRange reads at most length bytes starting at offset. It always sends a
+// Range header, so a preview of a multi-gigabyte object transfers only the
+// requested window. The caller must close Body.
+func (c *Client) GetRange(ctx context.Context, bucket, key string, offset, length int64) (*RangeObject, error) {
+	if offset < 0 {
+		return nil, fmt.Errorf("s3 range: negative offset")
+	}
+	if length <= 0 {
+		return nil, fmt.Errorf("s3 range: length must be positive")
+	}
+	out, err := c.stream.GetObject(ctx, &awss3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+length-1)),
+	})
+	if err != nil {
+		return nil, classify(ctx, "range", err)
+	}
+	total := contentRangeTotal(aws.ToString(out.ContentRange))
+	if total <= 0 {
+		total = aws.ToInt64(out.ContentLength)
+	}
+	return &RangeObject{
+		Body:        out.Body,
+		TotalSize:   total,
+		ContentType: aws.ToString(out.ContentType),
+		ETag:        strings.Trim(aws.ToString(out.ETag), `"`),
+	}, nil
+}
+
+// contentRangeTotal parses the total size out of "bytes 0-99/1234".
+func contentRangeTotal(header string) int64 {
+	_, total, ok := strings.Cut(header, "/")
+	if !ok {
+		return 0
+	}
+	value, err := strconv.ParseInt(strings.TrimSpace(total), 10, 64)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
+}
+
 // PresignGet returns a time-limited GET URL for a single object.
 func (c *Client) PresignGet(ctx context.Context, bucket, key string, ttl time.Duration) (string, error) {
 	req, err := c.presign.PresignGetObject(ctx, &awss3.GetObjectInput{
@@ -246,7 +344,8 @@ func classify(ctx context.Context, op string, err error) error {
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return &Error{Reason: ReasonAuth, Status: status, Retryable: false, Code: code, Op: op}
-	case status == http.StatusNotFound || code == "NoSuchKey" || code == "NoSuchBucket" || code == "NotFound":
+	case status == http.StatusNotFound || status == http.StatusRequestedRangeNotSatisfiable ||
+		code == "NoSuchKey" || code == "NoSuchBucket" || code == "NotFound" || code == "InvalidRange":
 		return &Error{Reason: ReasonNotFound, Status: http.StatusNotFound, Retryable: false, Code: code, Op: op}
 	default:
 		return &Error{Reason: ReasonUnavailable, Status: status, Retryable: true, Code: code, Op: op}

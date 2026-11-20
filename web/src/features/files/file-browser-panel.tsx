@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import {
   ChevronRight,
   Download,
+  Eye,
   FileText,
   Folder,
   Loader2,
@@ -15,16 +16,20 @@ import { toast } from 'sonner'
 
 import { formatDate } from '@/features/models/format'
 import { apiErrorMessage } from '@/lib/api'
-import { basePath } from '@/lib/base-path'
+import { apiBase, basePath } from '@/lib/base-path'
 import { CATALOG_RETRY_COUNT, catalogRetryDelay } from '@/lib/catalog-query'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { FilePreviewDialog } from './file-preview-dialog'
+import { formatBytes } from './format'
 import type {
   FileBrowserVersion,
   FileDownload,
   FileDownloadParams,
   FileEntry,
   FileListing,
+  FilePreview,
+  FilePreviewParams,
   FilesPageParams,
 } from './types'
 
@@ -38,6 +43,7 @@ interface FileBrowserPanelProps {
   tabPrefix: string
   fetchPage: (params: FilesPageParams) => Promise<FileListing>
   fetchDownload: (params: FileDownloadParams) => Promise<FileDownload>
+  fetchPreview: (params: FilePreviewParams) => Promise<FilePreview>
 }
 
 // Only S3-backed versions with a declared URI can be browsed online.
@@ -47,19 +53,26 @@ function browsableVersions(versions: FileBrowserVersion[]): FileBrowserVersion[]
   )
 }
 
-function formatBytes(value: number | undefined, locale: string): string {
-  if (value == null) return '—'
-  if (value < 1024) return `${value} B`
-  const units = ['KB', 'MB', 'GB', 'TB', 'PB']
-  let size = value / 1024
-  let index = 0
-  while (size >= 1024 && index < units.length - 1) {
-    size /= 1024
-    index += 1
+// Text-like files never need a round trip to decide whether "Open" applies;
+// the backend still makes the authoritative call.
+const TEXT_PREVIEW_EXTENSIONS = new Set([
+  'json', 'jsonl', 'ndjson', 'txt', 'md', 'markdown', 'csv', 'tsv', 'yaml', 'yml',
+  'toml', 'ini', 'cfg', 'conf', 'log', 'py', 'go', 'sh', 'js', 'ts', 'tsx', 'jsx',
+  'java', 'c', 'cpp', 'h', 'hpp', 'rs', 'sql', 'proto', 'xml', 'html', 'htm',
+  'css', 'svg', 'mod', 'sum', 'patch', 'diff',
+])
+const IMAGE_PREVIEW_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])
+
+// canPreview is a hint only: it decides whether the button looks active.
+function canPreview(entry: FileEntry): boolean {
+  if (entry.type !== 'file') return false
+  const name = entry.name.toLowerCase()
+  const dot = name.lastIndexOf('.')
+  if (dot < 0) {
+    return ['readme', 'license', 'notice', 'changelog', 'makefile', 'dockerfile'].includes(name)
   }
-  return `${new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en', {
-    maximumFractionDigits: size >= 10 ? 0 : 1,
-  }).format(size)} ${units[index]}`
+  const extension = name.slice(dot + 1)
+  return TEXT_PREVIEW_EXTENSIONS.has(extension) || IMAGE_PREVIEW_EXTENSIONS.has(extension) || extension === 'pdf'
 }
 
 // currentSitePath returns the router path (without BASE_PATH) so the sign-in
@@ -80,6 +93,7 @@ export function FileBrowserPanel({
   tabPrefix,
   fetchPage,
   fetchDownload,
+  fetchPreview,
 }: FileBrowserPanelProps) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -95,6 +109,8 @@ export function FileBrowserPanel({
   })
   const [prefix, setPrefix] = useState('')
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ entry: FileEntry; data: FilePreview } | null>(null)
 
   const filesQuery = useInfiniteQuery({
     queryKey: ['files', namespace, name, ref, prefix],
@@ -131,7 +147,7 @@ export function FileBrowserPanel({
     setDownloading(entry.path)
     try {
       const download = await fetchDownload({ ref, path: entry.path })
-      if (!download.available || !download.url) {
+      if (!download.available || (!download.url && download.mode !== 'proxy')) {
         toast.error(
           t(`${labels}.reasons.${download.reason ?? 'default'}`, {
             defaultValue: download.message || t(`${labels}.reasons.default`),
@@ -139,11 +155,45 @@ export function FileBrowserPanel({
         )
         return
       }
-      window.location.assign(download.url)
+      if (download.mode === 'proxy') {
+        // Bytes stream through MedRouter; the content endpoint enforces the
+        // per-file and per-user limits on the way out.
+        const query = new URLSearchParams({ path: entry.path, download: '1' })
+        if (ref) query.set('ref', ref)
+        window.location.assign(
+          `${apiBase}/${namespace}/${encodeURIComponent(name)}/files/content?${query.toString()}`
+        )
+        return
+      }
+      window.location.assign(download.url as string)
     } catch (error) {
       toast.error(apiErrorMessage(error) ?? t(`${labels}.downloadFailed`))
     } finally {
       setDownloading(null)
+    }
+  }
+
+  const startPreview = async (entry: FileEntry) => {
+    if (!user) {
+      void navigate({ to: '/sign-in', search: { redirect: currentSitePath() } })
+      return
+    }
+    setPreviewing(entry.path)
+    try {
+      const data = await fetchPreview({ ref, path: entry.path })
+      if (!data.available && data.reason) {
+        toast.error(
+          t(`${labels}.reasons.${data.reason}`, {
+            defaultValue: data.message || t(`${labels}.reasons.default`),
+          })
+        )
+        return
+      }
+      setPreview({ entry, data })
+    } catch (error) {
+      toast.error(apiErrorMessage(error) ?? t(`${labels}.previewFailed`))
+    } finally {
+      setPreviewing(null)
     }
   }
 
@@ -292,23 +342,43 @@ export function FileBrowserPanel({
                 </span>
                 <span className='ds-files-action' role='cell'>
                   {entry.type === 'file' ? (
-                    <button
-                      type='button'
-                      className='ml-btn ml-btn-secondary ds-files-download'
-                      disabled={!initialized || downloading === entry.path}
-                      onClick={() => void startDownload(entry)}
-                    >
-                      {downloading === entry.path ? (
-                        <Loader2 className='ds-files-spin' aria-hidden='true' />
-                      ) : user ? (
-                        <Download aria-hidden='true' />
-                      ) : (
-                        <Lock aria-hidden='true' />
-                      )}
-                      {user
-                        ? t(`${labels}.download`)
-                        : t(`${labels}.downloadAfterSignIn`)}
-                    </button>
+                    <span className='ds-files-actions'>
+                      <button
+                        type='button'
+                        className='ml-btn ml-btn-secondary ds-files-open'
+                        disabled={!initialized || previewing === entry.path || !canPreview(entry)}
+                        title={
+                          canPreview(entry)
+                            ? t(`${labels}.open`)
+                            : t(`${labels}.previewUnsupportedHint`)
+                        }
+                        onClick={() => void startPreview(entry)}
+                      >
+                        {previewing === entry.path ? (
+                          <Loader2 className='ds-files-spin' aria-hidden='true' />
+                        ) : (
+                          <Eye aria-hidden='true' />
+                        )}
+                        {t(`${labels}.open`)}
+                      </button>
+                      <button
+                        type='button'
+                        className='ml-btn ml-btn-secondary ds-files-download'
+                        disabled={!initialized || downloading === entry.path}
+                        onClick={() => void startDownload(entry)}
+                      >
+                        {downloading === entry.path ? (
+                          <Loader2 className='ds-files-spin' aria-hidden='true' />
+                        ) : user ? (
+                          <Download aria-hidden='true' />
+                        ) : (
+                          <Lock aria-hidden='true' />
+                        )}
+                        {user
+                          ? t(`${labels}.download`)
+                          : t(`${labels}.downloadAfterSignIn`)}
+                      </button>
+                    </span>
                   ) : null}
                 </span>
               </div>
@@ -340,6 +410,15 @@ export function FileBrowserPanel({
             storage: status.storage,
           })}
         </p>
+      ) : null}
+
+      {preview ? (
+        <FilePreviewDialog
+          entry={preview.entry}
+          preview={preview.data}
+          labels={labels}
+          onClose={() => setPreview(null)}
+        />
       ) : null}
     </section>
   )

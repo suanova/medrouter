@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,13 +36,34 @@ type stubStore struct {
 	page       *s3.ListPage
 	headErr    error
 	presignURL string
+	objectSize int64
+	objectBody string
+	rangeErr   error
 }
 
 func (s stubStore) List(context.Context, string, string, string, string, int32) (*s3.ListPage, error) {
 	return s.page, nil
 }
 func (s stubStore) Head(context.Context, string, string) (s3.Object, error) {
-	return s3.Object{}, s.headErr
+	return s3.Object{Size: s.objectSize}, s.headErr
+}
+func (s stubStore) GetRange(_ context.Context, _, _ string, offset, length int64) (*s3.RangeObject, error) {
+	if s.rangeErr != nil {
+		return nil, s.rangeErr
+	}
+	body := s.objectBody
+	start := offset
+	if start > int64(len(body)) {
+		start = int64(len(body))
+	}
+	end := start + length
+	if end > int64(len(body)) {
+		end = int64(len(body))
+	}
+	return &s3.RangeObject{
+		Body:      io.NopCloser(strings.NewReader(body[start:end])),
+		TotalSize: s.objectSize,
+	}, nil
 }
 func (s stubStore) PresignGet(context.Context, string, string, time.Duration) (string, error) {
 	return s.presignURL, nil

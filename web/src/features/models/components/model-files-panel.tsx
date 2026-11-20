@@ -1,6 +1,6 @@
 import { FileBrowserPanel } from '@/features/files/file-browser-panel'
 
-import { fetchModelDownloadUrl, fetchModelFiles } from '../api'
+import { fetchModelDownloadUrl, fetchModelFiles, fetchModelPreview } from '../api'
 import type { ModelDetail } from '../types'
 
 interface ModelFilesPanelProps {
@@ -17,6 +17,7 @@ export function ModelFilesPanel({ detail }: ModelFilesPanelProps) {
       tabPrefix='ml'
       fetchPage={(params) => fetchModelFiles(detail.model, params)}
       fetchDownload={(params) => fetchModelDownloadUrl(detail.model, params)}
+      fetchPreview={(params) => fetchModelPreview(detail.model, params)}
     />
   )
 }

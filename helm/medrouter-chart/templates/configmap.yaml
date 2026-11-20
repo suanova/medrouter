@@ -42,13 +42,26 @@ data:
   DATASET_LIBRARY_REQUEST_TIMEOUT_SECONDS: {{ .Values.datasetLibrary.requestTimeoutSeconds | quote }}
   S3_ENABLED: {{ .Values.datasetFiles.enabled | quote }}
   S3_ENDPOINT: {{ .Values.datasetFiles.endpoint | quote }}
+  S3_PUBLIC_ENDPOINT: {{ .Values.datasetFiles.publicEndpoint | quote }}
   S3_REGION: {{ .Values.datasetFiles.region | quote }}
   S3_PATH_STYLE: {{ .Values.datasetFiles.pathStyle | quote }}
   S3_CREDENTIALS_FILE: {{ .Values.datasetFiles.credentialsFile | quote }}
   S3_CREDENTIALS_PROFILE: {{ .Values.datasetFiles.credentialsProfile | quote }}
   S3_PRESIGN_TTL_SECONDS: {{ .Values.datasetFiles.presignTTLSeconds | quote }}
   S3_LIST_CACHE_TTL_SECONDS: {{ .Values.datasetFiles.listCacheTTLSeconds | quote }}
+  S3_HEAD_CACHE_TTL_SECONDS: {{ .Values.datasetFiles.headCacheTTLSeconds | quote }}
   S3_REQUEST_TIMEOUT_SECONDS: {{ .Values.datasetFiles.requestTimeoutSeconds | quote }}
+  S3_STREAM_TIMEOUT_SECONDS: {{ .Values.datasetFiles.streamTimeoutSeconds | quote }}
+  S3_DOWNLOAD_MODE: {{ .Values.datasetFiles.downloadMode | quote }}
+  S3_PREVIEW_ENABLED: {{ .Values.datasetFiles.preview.enabled | quote }}
+  S3_PREVIEW_TEXT_WINDOW_BYTES: {{ .Values.datasetFiles.preview.textWindowBytes | quote }}
+  S3_PREVIEW_IMAGE_MAX_BYTES: {{ .Values.datasetFiles.preview.imageMaxBytes | quote }}
+  S3_PREVIEW_PDF_MAX_BYTES: {{ .Values.datasetFiles.preview.pdfMaxBytes | quote }}
+  S3_PREVIEW_CONCURRENCY: {{ .Values.datasetFiles.preview.concurrency | quote }}
+  S3_DOWNLOAD_MAX_BYTES: {{ .Values.datasetFiles.download.maxBytes | quote }}
+  S3_DOWNLOAD_DAILY_QUOTA_BYTES: {{ .Values.datasetFiles.download.dailyQuotaBytes | quote }}
+  S3_DOWNLOAD_LARGE_THRESHOLD_BYTES: {{ .Values.datasetFiles.download.largeThresholdBytes | quote }}
+  S3_DOWNLOAD_LARGE_TTL_SECONDS: {{ .Values.datasetFiles.download.largeTTLSeconds | quote }}
   {{- if eq (toString (default "postgres" .Values.database.mode)) "sqlite" }}
   SQLITE_PATH: "/data/medrouter.db"
   {{- end }}

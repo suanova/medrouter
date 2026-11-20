@@ -187,12 +187,25 @@ CI 工作流 [`.github/workflows/kind-postgres.yaml`](.github/workflows/kind-pos
 | `S3_ENDPOINT` | 空 | S3 兼容端点（含 scheme），如 `http://10.66.2.1:30880`；**留空则使用 AWS 标准端点** |
 | `S3_REGION` | `us-east-1` | SigV4 签名 region；也接受 `AWS_REGION` / `AWS_DEFAULT_REGION` |
 | `S3_PATH_STYLE` | 自定义端点 `true`，AWS 端点 `false` | 路径风格寻址；RGW/MinIO 用 `true`，AWS 用 `false`（虚拟主机风格） |
-| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 空 | 静态凭据；也接受 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 空 | 静态凭据；也接受 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`。**留空即匿名访问，只能浏览和预览，下载会失败**：预签名必须有一组凭据，公开桶请配 `S3_DOWNLOAD_MODE=proxy` 或用任意只读凭据 |
 | `S3_SESSION_TOKEN` | 空 | 临时凭据的会话令牌（STS）；也接受 `AWS_SESSION_TOKEN`；长期密钥留空 |
 | `S3_CREDENTIALS_FILE` / `S3_CREDENTIALS_PROFILE` | 空 / `default` | 也可读取 AWS shared credentials 文件，替代上面的环境变量 |
 | `S3_PRESIGN_TTL_SECONDS` | `600` | 下载 URL 有效期 |
 | `S3_LIST_CACHE_TTL_SECONDS` | `20` | 目录列表缓存 TTL |
-| `S3_REQUEST_TIMEOUT_SECONDS` | `5` | 单次对象存储请求超时 |
+| `S3_HEAD_CACHE_TTL_SECONDS` | `30` | 对象元信息缓存 TTL（`0` 关闭） |
+| `S3_REQUEST_TIMEOUT_SECONDS` | `5` | 单次元数据请求超时 |
+| `S3_STREAM_TIMEOUT_SECONDS` | `300` | 流式预览/代理下载的写超时 |
+| `S3_PUBLIC_ENDPOINT` | 空 | **只用于签发下载 URL** 的公网或 CDN 域名；`S3_ENDPOINT` 是内网地址时必填 |
+| `S3_DOWNLOAD_MODE` | `presign` | `presign` 直连对象存储；`proxy` 字节经 MedRouter 转发 |
+| `S3_PREVIEW_ENABLED` | `true` | 文件"打开"（在线预览）开关 |
+| `S3_PREVIEW_TEXT_WINDOW_BYTES` | `262144` | 文本预览单次读取窗口（上限 1 MiB） |
+| `S3_PREVIEW_IMAGE_MAX_BYTES` | `10485760` | 可预览图片的大小上限（10 MiB） |
+| `S3_PREVIEW_PDF_MAX_BYTES` | `33554432` | 可预览 PDF 的大小上限（32 MiB） |
+| `S3_PREVIEW_CONCURRENCY` | `16` | 同时进行的预览流数量 |
+| `S3_DOWNLOAD_MAX_BYTES` | `53687091200` | 单文件下载上限（50 GiB）；`0` 不限 |
+| `S3_DOWNLOAD_DAILY_QUOTA_BYTES` | `107374182400` | 单用户 24h 下载配额（100 GiB）；`0` 不限 |
+| `S3_DOWNLOAD_LARGE_THRESHOLD_BYTES` | `2147483648` | 超过此大小使用更长的下载 URL 有效期 |
+| `S3_DOWNLOAD_LARGE_TTL_SECONDS` | `3600` | 大文件的下载 URL 有效期 |
 
 数据库在启动时通过 GORM `AutoMigrate` 自动建表；SQLite 默认开启 WAL 与 `busy_timeout`，并将连接数限制为 1（仅适合单实例）。
 
@@ -316,7 +329,7 @@ aws s3 ls                           # 需要 s3:ListAllMyBuckets
 aws s3 ls s3://my-medical-datasets/ # 需要 s3:ListBucket
 ```
 
-**重要前提**：预签名 URL 由浏览器直接访问，因此 `S3_ENDPOINT` 必须对最终用户可达（LB / Ingress / 公网 RGW）。如果对象存储只在集群内可达，需要后续增加「同源流式代理」下载模式（`S3_DOWNLOAD_MODE=proxy`），当前版本未实现。
+**重要前提**：预签名 URL 由浏览器直接访问，因此 `S3_ENDPOINT` 必须对最终用户可达（LB / Ingress / 公网 RGW）。对象存储只在集群内可达时有两种处理方式：设置 `S3_PUBLIC_ENDPOINT` 指向公网或 CDN 域名（列表/元数据走内网、签名走公网，推荐），或设置 `S3_DOWNLOAD_MODE=proxy` 让字节经 MedRouter 同源转发（会占用 Pod 带宽）。US3 的内网域名形如 `internal.s3-<region>`，外网域名形如 `s3-<region>`，两者不能混用。
 
 Helm 配置（`datasetFiles.*`）：
 
@@ -360,11 +373,15 @@ datasetFiles:
 | `GET` | `/api/models` | 模型库列表（公开；集群异常时 200 + `available:false`） |
 | `GET` | `/api/models/:name` | 模型详情（`spec.model` 或 `ModelVersion.metadata.name`；不存在 404） |
 | `GET` | `/api/models/:name/files` | 模型目录列表（公开；`ref`、`prefix`、`cursor`、`limit`；不可用时 200 + `available:false`） |
-| `GET` | `/api/models/:name/files/download` | 签发某个模型文件的预签名 URL（需登录；`ref`、`path`） |
+| `GET` | `/api/models/:name/files/download` | 签发某个模型文件的预签名 URL（需登录；`ref`、`path`；`proxy` 模式返回 `mode:"proxy"`） |
+| `GET` | `/api/models/:name/files/preview` | 模型文件预览（需登录；文本返回前 256 KiB，图片/PDF 返回 `content_url`） |
+| `GET` | `/api/models/:name/files/content` | 同源流式读取图片/PDF（需登录；支持 `Range`；`download=1` 走代理下载） |
 | `GET` | `/api/datasets` | 数据集库列表（公开；集群异常时 200 + `available:false`） |
 | `GET` | `/api/datasets/:name` | 数据集详情（`spec.dataset` 或 `Dataset.metadata.name`；不存在 404 `DATASET_NOT_FOUND`） |
 | `GET` | `/api/datasets/:name/files` | 数据集目录列表（公开；`ref`、`prefix`、`cursor`、`limit`；不可用时 200 + `available:false`） |
-| `GET` | `/api/datasets/:name/files/download` | 签发某个文件的预签名 URL（需登录；`ref`、`path`） |
+| `GET` | `/api/datasets/:name/files/download` | 签发某个文件的预签名 URL（需登录；`ref`、`path`；`proxy` 模式返回 `mode:"proxy"`） |
+| `GET` | `/api/datasets/:name/files/preview` | 数据集文件预览（需登录；文本返回前 256 KiB，图片/PDF 返回 `content_url`） |
+| `GET` | `/api/datasets/:name/files/content` | 同源流式读取图片/PDF（需登录；支持 `Range`；`download=1` 走代理下载） |
 
 ## 测试
 
