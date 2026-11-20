@@ -54,13 +54,13 @@ data:
   S3_STREAM_TIMEOUT_SECONDS: {{ .Values.datasetFiles.streamTimeoutSeconds | quote }}
   S3_DOWNLOAD_MODE: {{ .Values.datasetFiles.downloadMode | quote }}
   S3_PREVIEW_ENABLED: {{ .Values.datasetFiles.preview.enabled | quote }}
-  S3_PREVIEW_TEXT_WINDOW_BYTES: {{ .Values.datasetFiles.preview.textWindowBytes | quote }}
-  S3_PREVIEW_IMAGE_MAX_BYTES: {{ .Values.datasetFiles.preview.imageMaxBytes | quote }}
-  S3_PREVIEW_PDF_MAX_BYTES: {{ .Values.datasetFiles.preview.pdfMaxBytes | quote }}
+  S3_PREVIEW_TEXT_WINDOW_BYTES: {{ .Values.datasetFiles.preview.textWindowBytes | int64 | quote }}
+  S3_PREVIEW_IMAGE_MAX_BYTES: {{ .Values.datasetFiles.preview.imageMaxBytes | int64 | quote }}
+  S3_PREVIEW_PDF_MAX_BYTES: {{ .Values.datasetFiles.preview.pdfMaxBytes | int64 | quote }}
   S3_PREVIEW_CONCURRENCY: {{ .Values.datasetFiles.preview.concurrency | quote }}
-  S3_DOWNLOAD_MAX_BYTES: {{ .Values.datasetFiles.download.maxBytes | quote }}
-  S3_DOWNLOAD_DAILY_QUOTA_BYTES: {{ .Values.datasetFiles.download.dailyQuotaBytes | quote }}
-  S3_DOWNLOAD_LARGE_THRESHOLD_BYTES: {{ .Values.datasetFiles.download.largeThresholdBytes | quote }}
+  S3_DOWNLOAD_MAX_BYTES: {{ .Values.datasetFiles.download.maxBytes | int64 | quote }}
+  S3_DOWNLOAD_DAILY_QUOTA_BYTES: {{ .Values.datasetFiles.download.dailyQuotaBytes | int64 | quote }}
+  S3_DOWNLOAD_LARGE_THRESHOLD_BYTES: {{ .Values.datasetFiles.download.largeThresholdBytes | int64 | quote }}
   S3_DOWNLOAD_LARGE_TTL_SECONDS: {{ .Values.datasetFiles.download.largeTTLSeconds | quote }}
   {{- if eq (toString (default "postgres" .Values.database.mode)) "sqlite" }}
   SQLITE_PATH: "/data/medrouter.db"
