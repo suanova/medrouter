@@ -642,7 +642,9 @@
         "stopped": "Stopped",
         "failed": "Failed",
         "planned": "Planned",
-        "succeeded": "Succeeded"
+        "succeeded": "Succeeded",
+        "merging": "Merging",
+        "ready": "Ready"
       },
       "open": "Open",
       "stop": "Stop",

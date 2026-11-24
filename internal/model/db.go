@@ -82,6 +82,10 @@ func InitDB(cfg *config.Config) error {
 		log.Printf("database: sqlite path=%s", cfg.SQLitePath)
 	}
 
+	// The first workspace index keyed (owner, source) only, which prevented a
+	// model from having both a deployment and a fine-tune. Kind is part of the
+	// key now; drop the old one first (ignored when absent).
+	_ = db.Migrator().DropIndex(&Workspace{}, "idx_workspaces_owner_source")
 	if err := db.AutoMigrate(&User{}, &UserSession{}, &VerificationCode{}, &OAuthBinding{}, &Favorite{}, &Workspace{}); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}

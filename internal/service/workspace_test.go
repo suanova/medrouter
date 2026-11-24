@@ -12,15 +12,19 @@ import (
 )
 
 type fakeNotebooks struct {
-	created  [][3]string // namespace, name, spec JSON is checked separately
-	specs    []map[string]any
-	labels   []map[string]string
-	state    kube.NotebookState
-	found    bool
-	err      error
-	deleted  []string
-	running  []bool
-	jobPhase string
+	created        [][3]string // namespace, name, spec JSON is checked separately
+	specs          []map[string]any
+	labels         []map[string]string
+	state          kube.NotebookState
+	found          bool
+	err            error
+	deleted        []string
+	running        []bool
+	jobPhase       string
+	inferenceReady bool
+	modelVersions  []string
+	// jobStates is per-job-name; when nil the fake falls back to (found, jobPhase).
+	jobStates map[string]string
 }
 
 func (f *fakeNotebooks) CreateDevEnvironment(_ context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.DevEnvironment, error) {
@@ -65,9 +69,19 @@ func (f *fakeNotebooks) CreateJob(_ context.Context, namespace, name string, lab
 	return kube.Job{}, nil
 }
 
-func (f *fakeNotebooks) GetJob(_ context.Context, _, _ string) (kube.Job, bool, error) {
+func (f *fakeNotebooks) GetJob(_ context.Context, _, name string) (kube.Job, bool, error) {
 	job := kube.Job{}
-	switch f.jobPhase {
+	phase := f.jobPhase
+	if f.jobStates != nil {
+		value, ok := f.jobStates[name]
+		if !ok {
+			return kube.Job{}, false, f.err
+		}
+		phase = value
+	} else if !f.found {
+		return kube.Job{}, false, f.err
+	}
+	switch phase {
 	case "Running":
 		job.Status.Active = 1
 	case "Succeeded":
@@ -77,12 +91,44 @@ func (f *fakeNotebooks) GetJob(_ context.Context, _, _ string) (kube.Job, bool, 
 		job.Status.Failed = 1
 		job.Status.Conditions = []kube.Condition{{Type: "Failed", Status: "True", Reason: "BackoffLimitExceeded"}}
 	}
-	return job, f.found, f.err
+	return job, true, f.err
 }
 
 func (f *fakeNotebooks) DeleteJob(_ context.Context, _, name string) error {
 	f.deleted = append(f.deleted, name)
 	return f.err
+}
+
+func (f *fakeNotebooks) CreateInferenceService(_ context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.InferenceService, error) {
+	if f.err != nil {
+		return kube.InferenceService{}, f.err
+	}
+	f.created = append(f.created, [3]string{namespace, name, "inference"})
+	f.specs = append(f.specs, spec)
+	f.labels = append(f.labels, labels)
+	return kube.InferenceService{}, nil
+}
+
+func (f *fakeNotebooks) GetInferenceService(_ context.Context, _, _ string) (kube.InferenceService, bool, error) {
+	service := kube.InferenceService{}
+	if f.inferenceReady {
+		service.Status.Conditions = []kube.Condition{{Type: "Ready", Status: "True"}}
+	}
+	return service, f.found, f.err
+}
+
+func (f *fakeNotebooks) DeleteInferenceService(_ context.Context, _, name string) error {
+	f.deleted = append(f.deleted, name)
+	return f.err
+}
+
+func (f *fakeNotebooks) CreateModelVersion(_ context.Context, name string, _, _ map[string]string, _ map[string]any) error {
+	f.modelVersions = append(f.modelVersions, name)
+	return f.err
+}
+
+func (f *fakeNotebooks) ModelVersionExists(context.Context, string) (bool, error) {
+	return false, f.err
 }
 
 func studioConfig(dryRun bool) *config.Config {
@@ -97,6 +143,7 @@ func studioConfig(dryRun bool) *config.Config {
 		StudioFinetuneOutput:     "/mnt/cephfs/medrouter/lora",
 		StudioFinetuneDeadline:   12 * time.Hour,
 		StudioFinetuneMaxSamples: 20000,
+		StudioGatewayRouter:      "cubestack-ai-gateway-private",
 	}
 }
 
@@ -399,19 +446,6 @@ func TestWorkspaceFineTuneRejectsIncompatibleDataset(t *testing.T) {
 	}
 }
 
-func TestWorkspaceFineTuneRequiresDataset(t *testing.T) {
-	favoriteTestDB(t)
-	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
-		t.Fatalf("star: %v", apiErr)
-	}
-	svc := finetuneWorkspaceService(t, true, nil, hostPathStorage())
-
-	_, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "  ")
-	if apiErr == nil || apiErr.Code != "DATASET_REQUIRED" {
-		t.Fatalf("apiErr = %+v", apiErr)
-	}
-}
-
 func TestWorkspaceFineTuneNeedsHostPathWeights(t *testing.T) {
 	favoriteTestDB(t)
 	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
@@ -463,5 +497,161 @@ func TestDeriveJobPhase(t *testing.T) {
 	}
 	if phase, reason := deriveJobPhase(kube.JobStatus{Failed: 1, Reason: "DeadlineExceeded"}); phase != model.WorkspaceFailed || reason != "DeadlineExceeded" {
 		t.Fatalf("failed counter -> %s/%s", phase, reason)
+	}
+}
+
+func deployableModel(context.Context, string) (ModelArtifact, bool) {
+	return ModelArtifact{
+		Name: "biomistral-7b-bf16", Model: "biomistral-7b",
+		Architecture: "mistral", Quantization: "bf16",
+		Storage: hostPathStorage(),
+	}, true
+}
+
+func runtimeProfiles(context.Context) []kube.RuntimeProfile {
+	return []kube.RuntimeProfile{
+		{Metadata: kube.ObjectMeta{Name: "metax-vllm-biomistral"},
+			Spec: kube.RuntimeProfileSpec{
+				Engine:            kube.Engine{Name: "vllm", Version: "0.8"},
+				ModelRequirements: kube.ModelRequirements{Architectures: []string{"mistral"}, Quantization: []string{"bf16"}},
+			}},
+		{Metadata: kube.ObjectMeta{Name: "metax-sglang-biomistral"},
+			Spec: kube.RuntimeProfileSpec{
+				Engine:            kube.Engine{Name: "sglang", Version: "0.5.14"},
+				ModelRequirements: kube.ModelRequirements{Architectures: []string{"mistral"}, Quantization: []string{"bf16"}},
+			}},
+	}
+}
+
+func TestMatchProfilePrefersSGLang(t *testing.T) {
+	profile, ok := matchProfile(runtimeProfiles(context.Background()), "mistral", "bf16")
+	if !ok || profile.Metadata.Name != "metax-sglang-biomistral" {
+		t.Fatalf("profile = %+v ok=%v", profile, ok)
+	}
+	if _, ok := matchProfile(runtimeProfiles(context.Background()), "mistral", "fp16"); ok {
+		t.Fatal("quantization mismatch should not match")
+	}
+	if _, ok := matchProfile(nil, "mistral", "bf16"); ok {
+		t.Fatal("no profiles should not match")
+	}
+}
+
+func TestWorkspaceDeployDryRun(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	svc := NewWorkspaceService(studioConfig(true), nil, nil).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	plan, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	if plan.Kind != WorkspaceInference || plan.Phase != WorkspacePlanned || !plan.DryRun {
+		t.Fatalf("plan = %+v", plan)
+	}
+	if plan.Matched.Profile != "metax-sglang-biomistral" || plan.Matched.ModelVersion != "biomistral-7b-bf16" {
+		t.Fatalf("matched = %+v", plan.Matched)
+	}
+	if plan.Matched.Router != "cubestack-ai-gateway-private" {
+		t.Fatalf("router = %q", plan.Matched.Router)
+	}
+}
+
+func TestWorkspaceDeployCreatesInferenceService(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	if workspace.Kind != WorkspaceInference || workspace.Phase != model.WorkspaceCreating {
+		t.Fatalf("workspace = %+v", workspace)
+	}
+	if len(cluster.created) != 1 || cluster.created[0][2] != "inference" {
+		t.Fatalf("cluster calls = %+v", cluster.created)
+	}
+	spec := cluster.specs[0]
+	if spec["modelRef"] != "biomistral-7b-bf16" || spec["profileRef"] != "metax-sglang-biomistral" {
+		t.Fatalf("spec = %+v", spec)
+	}
+	route := spec["route"].(map[string]any)
+	if route["aigatewayRouter"] != "cubestack-ai-gateway-private" {
+		t.Fatalf("route = %+v", route)
+	}
+}
+
+func TestWorkspaceDeployNeedsMatchingProfile(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "esm2"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	unknown := func(context.Context, string) (ModelArtifact, bool) {
+		return ModelArtifact{Name: "esm2-fp32", Model: "esm2", Architecture: "esm2", Quantization: "fp32", Storage: hostPathStorage()}, true
+	}
+	svc := NewWorkspaceService(studioConfig(true), nil, nil).WithDeployment(unknown, runtimeProfiles)
+
+	_, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "esm2", "")
+	if apiErr == nil || apiErr.Code != "NO_PROFILE" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
+
+func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+
+	// Training done: the first reconcile creates the merge job.
+	cluster.jobStates[workspace.Name] = "Succeeded"
+	svc.Reconcile(context.Background())
+	mergeJob := workspace.Name + "-merge"
+	if _, ok := cluster.jobStates[mergeJob]; ok {
+		t.Fatal("merge job state should not be set yet")
+	}
+	found := false
+	for _, created := range cluster.created {
+		if created[1] == mergeJob {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("merge job not created: %+v", cluster.created)
+	}
+
+	// Merge done: the ModelVersion is registered and the workspace becomes ready.
+	cluster.jobStates[mergeJob] = "Succeeded"
+	svc.Reconcile(context.Background())
+
+	list, _ := svc.List(1)
+	if len(list) != 1 || list[0].Phase != model.WorkspaceReady || list[0].ModelVersion != workspace.Name {
+		t.Fatalf("workspace = %+v", list)
+	}
+	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
+		t.Fatalf("model versions = %+v", cluster.modelVersions)
 	}
 }

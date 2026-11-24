@@ -21,6 +21,8 @@ export type WorkspacePhase =
   | 'running'
   | 'stopped'
   | 'succeeded'
+  | 'merging'
+  | 'ready'
   | 'failed'
 
 export interface Workspace {

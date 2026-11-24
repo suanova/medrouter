@@ -6,6 +6,7 @@ import {
   Loader2,
   Play,
   Server,
+  SlidersHorizontal,
   Square,
   Trash2,
   X,
@@ -80,10 +81,12 @@ export function StudioPage() {
     t('studio.headNotes.favorites', { count: favorites.length }),
   ]
 
-  const workspaceFor = (favorite: Favorite) =>
+  const workspaceFor = (favorite: Favorite, kind: Workspace['kind']) =>
     workspaces.find(
       (workspace) =>
-        workspace.source_kind === favorite.kind && workspace.source_name === favorite.name
+        workspace.kind === kind &&
+        workspace.source_kind === favorite.kind &&
+        workspace.source_name === favorite.name
     )
 
   const launchMutation = useMutation({
@@ -196,7 +199,8 @@ export function StudioPage() {
                   <FavoriteCard
                     key={`${favorite.kind}:${favorite.name}`}
                     favorite={favorite}
-                    workspace={workspaceFor(favorite)}
+                    inference={workspaceFor(favorite, 'inference')}
+                    finetune={workspaceFor(favorite, 'finetune')}
                     pending={launchMutation.isPending}
                     onLaunch={() => launchMutation.mutate(favorite)}
                     onOpen={openWorkspace}
@@ -276,14 +280,16 @@ export function StudioPage() {
  */
 function FavoriteCard({
   favorite,
-  workspace,
+  inference,
+  finetune,
   pending,
   onLaunch,
   onOpen,
   onFinetune,
 }: {
   favorite: Favorite
-  workspace?: Workspace
+  inference?: Workspace
+  finetune?: Workspace
   pending: boolean
   onLaunch: () => void
   onOpen: (workspace: Workspace) => void
@@ -292,8 +298,11 @@ function FavoriteCard({
   const { t } = useTranslation()
   const isModel = favorite.kind === 'model'
   const Icon = isModel ? Server : BookOpen
-  const creating = workspace?.phase === 'creating'
-  const running = workspace?.phase === 'running'
+  const workspace = inference ?? finetune
+  const creating = inference
+    ? inference.phase === 'creating'
+    : finetune?.phase === 'creating' || finetune?.phase === 'running'
+  const running = inference?.phase === 'running'
 
   return (
     <article className='st-fav'>
@@ -322,12 +331,12 @@ function FavoriteCard({
       </p>
 
       <footer className='st-fav-foot'>
-        {isModel && workspace?.kind === 'finetune' ? (
+        {isModel && finetune ? (
           <button type='button' className='ml-btn ml-btn-secondary st-fav-btn' disabled>
-            {workspace.phase === 'creating' || workspace.phase === 'running' ? (
+            {finetune.phase === 'creating' || finetune.phase === 'running' || finetune.phase === 'merging' ? (
               <Loader2 className='st-spin' aria-hidden='true' />
             ) : null}
-            {t(`studio.finetune.phases.${workspace.phase}`)}
+            {t(`studio.finetune.phases.${finetune.phase}`)}
           </button>
         ) : null}
         {isModel ? (
@@ -335,11 +344,11 @@ function FavoriteCard({
             {t('studio.favorites.finetune')}
           </button>
         ) : null}
-        {running && workspace ? (
+        {running && inference ? (
           <button
             type='button'
             className='ml-btn ml-btn-primary st-fav-btn'
-            onClick={() => onOpen(workspace)}
+            onClick={() => onOpen(inference)}
           >
             <ExternalLink aria-hidden='true' />
             {t('studio.workspace.open')}
@@ -384,8 +393,9 @@ function WorkspaceCard({
   onOpen: () => void
 }) {
   const { t } = useTranslation()
-  const Icon = workspace.kind === 'inference' ? Server : BookOpen
-  const isJob = workspace.kind === 'finetune'
+  const Icon =
+    workspace.kind === 'inference' ? Server : workspace.kind === 'finetune' ? SlidersHorizontal : BookOpen
+  const isJob = workspace.kind === 'finetune' || workspace.kind === 'inference'
   const active = workspace.phase === 'running'
   const busy = workspace.phase === 'creating'
 

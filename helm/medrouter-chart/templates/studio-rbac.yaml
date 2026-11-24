@@ -20,6 +20,9 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["ai.cubestack.io"]
+    resources: ["inferenceservices"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
   # Reading pod logs is how a failed training run is diagnosed.
   - apiGroups: [""]
     resources: ["pods"]
@@ -39,6 +42,36 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "medrouter.fullname" . }}-studio
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "medrouter.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+{{- /*
+  ModelVersions are cluster-scoped: registering a merged fine-tune needs a
+  ClusterRole. Only create/get are granted; nothing is updated or deleted.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "medrouter.fullname" . }}-studio-modelversions
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["ai.cubestack.io"]
+    resources: ["modelversions"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "medrouter.fullname" . }}-studio-modelversions
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "medrouter.fullname" . }}-studio-modelversions
 subjects:
   - kind: ServiceAccount
     name: {{ include "medrouter.serviceAccountName" . }}
