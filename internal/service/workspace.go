@@ -741,14 +741,16 @@ func deriveJobPhase(status kube.JobStatus) (phase, reason string) {
 			return model.WorkspaceFailed, status.Reason
 		}
 	}
-	switch strings.ToLower(status.Phase) {
-	case "succeeded":
+	// A batch Job has no status.phase; only conditions and counters. Reading
+	// Phase here was why a running fine-tune stayed "creating".
+	if status.Succeeded > 0 {
 		return model.WorkspaceSucceeded, ""
-	case "failed":
-		return model.WorkspaceFailed, status.Reason
-	case "running":
-		return model.WorkspaceRunning, ""
-	default:
-		return model.WorkspaceCreating, status.Reason
 	}
+	if status.Failed > 0 {
+		return model.WorkspaceFailed, status.Reason
+	}
+	if status.Active > 0 {
+		return model.WorkspaceRunning, ""
+	}
+	return model.WorkspaceCreating, status.Reason
 }

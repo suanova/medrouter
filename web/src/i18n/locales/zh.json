@@ -705,7 +705,13 @@
       },
       "planOutput": "产物路径",
       "planDeadline": "超时",
-      "dryRunNote": "模拟模式：没有创建训练任务，以下是将会创建的内容。"
+      "dryRunNote": "模拟模式：没有创建训练任务，以下是将会创建的内容。",
+      "phases": {
+        "creating": "训练准备中",
+        "running": "训练中",
+        "succeeded": "已完成",
+        "failed": "训练失败"
+      }
     }
   },
   "home": {
