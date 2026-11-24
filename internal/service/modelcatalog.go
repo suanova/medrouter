@@ -135,6 +135,67 @@ func (c *ModelCatalog) ResolveVersionStorage(ctx context.Context, name, versionR
 	}, true, status
 }
 
+// ModelArtifact is the identifying information the studio needs to deploy or
+// derive from one model version.
+type ModelArtifact struct {
+	Name         string
+	Model        string
+	Architecture string
+	Quantization string
+	Storage      kube.ModelStorage
+	// Adapter is the LoRA adapter directory relative to Storage, when this
+	// version is a fine-tune rather than a standalone model.
+	Adapter string
+}
+
+// Artifact resolves a model or a specific ModelVersion name. When given a model
+// name it picks the newest version.
+func (c *ModelCatalog) Artifact(ctx context.Context, ref string) (ModelArtifact, bool) {
+	snap := c.snapshot(ctx)
+	if !snap.available {
+		return ModelArtifact{}, false
+	}
+	var match *kube.ModelVersion
+	for i := range snap.mvs {
+		if snap.mvs[i].Metadata.Name == ref {
+			match = &snap.mvs[i]
+			break
+		}
+	}
+	if match == nil {
+		for i := range snap.mvs {
+			version := &snap.mvs[i]
+			if version.Spec.Model != ref {
+				continue
+			}
+			if match == nil || version.Metadata.CreationTimestamp.After(match.Metadata.CreationTimestamp) {
+				match = version
+			}
+		}
+	}
+	if match == nil {
+		return ModelArtifact{}, false
+	}
+	return ModelArtifact{
+		Name:         match.Metadata.Name,
+		Model:        match.Spec.Model,
+		Architecture: match.Spec.Architecture,
+		Quantization: match.Spec.Quantization,
+		Storage:      match.Spec.Storage,
+		Adapter:      match.Metadata.Annotations["medrouter.io/lora-adapter"],
+	}, true
+}
+
+// Profiles returns the runtime profiles, newest snapshot first, for matching a
+// model against an engine.
+func (c *ModelCatalog) Profiles(ctx context.Context) []kube.RuntimeProfile {
+	snap := c.snapshot(ctx)
+	if !snap.available {
+		return nil
+	}
+	return snap.profiles
+}
+
 // StorageOf returns the storage block of the first version representing a
 // model. The studio uses it to mount base weights for fine-tuning; it is not
 // part of the public API shape.

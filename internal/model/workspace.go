@@ -11,25 +11,30 @@ const (
 	WorkspaceStopped   = "stopped"
 	WorkspaceFailed    = "failed"
 	WorkspaceSucceeded = "succeeded"
+	// A fine-tune moves through merging (adapter folded into the base) before
+	// its ModelVersion is registered.
+	WorkspaceMerging = "merging"
+	WorkspaceReady   = "ready"
 )
 
 // Workspace is one launched environment derived from a favorite. A favorite
 // owns at most one workspace, which the unique index enforces.
 type Workspace struct {
-	ID         int64     `gorm:"primaryKey" json:"id"`
-	OwnerID    int64     `gorm:"not null;uniqueIndex:idx_workspaces_owner_source,priority:1" json:"-"`
-	SourceKind string    `gorm:"size:16;not null;uniqueIndex:idx_workspaces_owner_source,priority:2" json:"source_kind"`
-	SourceName string    `gorm:"size:128;not null;uniqueIndex:idx_workspaces_owner_source,priority:3" json:"source_name"`
-	Kind       string    `gorm:"size:16;not null" json:"kind"`
-	Name       string    `gorm:"size:128;not null" json:"name"`
-	Namespace  string    `gorm:"size:128;not null" json:"namespace"`
-	Phase      string    `gorm:"size:16;not null" json:"phase"`
-	Reason     string    `gorm:"size:255" json:"reason,omitempty"`
-	Endpoint   string    `gorm:"size:512" json:"endpoint,omitempty"`
-	Matched    string    `gorm:"size:1024" json:"matched"` // JSON: resources the backend chose
-	Spec       string    `gorm:"size:8192" json:"-"`       // JSON: the CR spec that was requested
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID           int64     `gorm:"primaryKey" json:"id"`
+	OwnerID      int64     `gorm:"not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:1" json:"-"`
+	Kind         string    `gorm:"size:16;not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:2" json:"kind"`
+	SourceKind   string    `gorm:"size:16;not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:3" json:"source_kind"`
+	SourceName   string    `gorm:"size:128;not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:4" json:"source_name"`
+	Name         string    `gorm:"size:128;not null" json:"name"`
+	Namespace    string    `gorm:"size:128;not null" json:"namespace"`
+	Phase        string    `gorm:"size:16;not null" json:"phase"`
+	Reason       string    `gorm:"size:255" json:"reason,omitempty"`
+	Endpoint     string    `gorm:"size:512" json:"endpoint,omitempty"`
+	Matched      string    `gorm:"size:1024" json:"matched"`
+	ModelVersion string    `gorm:"size:128" json:"model_version,omitempty"` // JSON: resources the backend chose
+	Spec         string    `gorm:"size:8192" json:"-"`                      // JSON: the CR spec that was requested
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (Workspace) TableName() string { return "workspaces" }

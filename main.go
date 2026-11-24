@@ -78,7 +78,8 @@ func main() {
 	}
 	finetuneService := service.NewFineTuneService(catalog, datasetCatalog)
 	workspaceService := service.NewWorkspaceService(cfg, workspaceCluster, datasetSize).
-		WithFineTune(catalog.StorageOf, finetuneService)
+		WithFineTune(catalog.StorageOf, finetuneService).
+		WithDeployment(catalog.Artifact, catalog.Profiles)
 	studioController := controller.NewStudioController(service.NewFavoriteService(), workspaceService, finetuneService)
 
 	engine := router.New(router.Deps{

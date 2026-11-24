@@ -171,6 +171,8 @@ studio:
   finetuneDeadlineSeconds: 43200
   # One MXC550 runs ~2 samples/s; 20k rows x 2 epochs is about 5.5h.
   finetuneMaxSamples: 20000
+  # AI gateway router the deployed InferenceService publishes through.
+  gatewayRouter: cubestack-ai-gateway-private
   # Role + RoleBinding that allow managing DevEnvironments in `namespace`.
   # Only rendered when enabled and not dry-run.
   rbac:

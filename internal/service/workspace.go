@@ -38,6 +38,13 @@ type WorkspaceCluster interface {
 	CreateJob(ctx context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.Job, error)
 	GetJob(ctx context.Context, namespace, name string) (kube.Job, bool, error)
 	DeleteJob(ctx context.Context, namespace, name string) error
+
+	CreateInferenceService(ctx context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.InferenceService, error)
+	GetInferenceService(ctx context.Context, namespace, name string) (kube.InferenceService, bool, error)
+	DeleteInferenceService(ctx context.Context, namespace, name string) error
+
+	CreateModelVersion(ctx context.Context, name string, labels, annotations map[string]string, spec map[string]any) error
+	ModelVersionExists(ctx context.Context, name string) (bool, error)
 }
 
 // DatasetSizeFunc reports a dataset's declared size, for example "287Mi". The
@@ -66,22 +73,29 @@ type MatchedResources struct {
 	Output     string `json:"output,omitempty"`
 	Deadline   int    `json:"deadline_seconds,omitempty"`
 	MaxSamples int    `json:"max_samples,omitempty"`
+
+	// Inference plan fields.
+	Profile      string `json:"profile,omitempty"`
+	ModelVersion string `json:"model_version,omitempty"`
+	Router       string `json:"router,omitempty"`
+	Adapter      string `json:"adapter,omitempty"`
 }
 
 // WorkspaceDTO is the API shape of one workspace.
 type WorkspaceDTO struct {
-	ID         int64            `json:"id"`
-	Kind       string           `json:"kind"`
-	SourceKind string           `json:"source_kind"`
-	SourceName string           `json:"source_name"`
-	Name       string           `json:"name"`
-	Namespace  string           `json:"namespace"`
-	Phase      string           `json:"phase"`
-	Reason     string           `json:"reason,omitempty"`
-	Endpoint   string           `json:"endpoint,omitempty"`
-	Matched    MatchedResources `json:"matched"`
-	DryRun     bool             `json:"dry_run,omitempty"`
-	CreatedAt  string           `json:"created_at,omitempty"`
+	ID           int64            `json:"id"`
+	Kind         string           `json:"kind"`
+	SourceKind   string           `json:"source_kind"`
+	SourceName   string           `json:"source_name"`
+	Name         string           `json:"name"`
+	Namespace    string           `json:"namespace"`
+	Phase        string           `json:"phase"`
+	Reason       string           `json:"reason,omitempty"`
+	Endpoint     string           `json:"endpoint,omitempty"`
+	Matched      MatchedResources `json:"matched"`
+	DryRun       bool             `json:"dry_run,omitempty"`
+	ModelVersion string           `json:"model_version,omitempty"`
+	CreatedAt    string           `json:"created_at,omitempty"`
 }
 
 // WorkspaceService turns a favorite into a running environment. It owns the
@@ -92,6 +106,8 @@ type WorkspaceService struct {
 	datasetSz DatasetSizeFunc
 	modelStor ModelStorageFunc
 	finetune  *FineTuneService
+	modelInfo ModelInfoFunc
+	profiles  ProfilesFunc
 	now       func() time.Time
 }
 
@@ -146,6 +162,9 @@ func (s *WorkspaceService) Create(ctx context.Context, ownerID int64, sourceKind
 	}
 
 	if sourceKind == FavoriteModel {
+		if strings.TrimSpace(datasetName) == "" {
+			return s.createInference(ctx, ownerID, sourceName)
+		}
 		return s.createFinetune(ctx, ownerID, sourceName, datasetName)
 	}
 
@@ -225,9 +244,9 @@ func (s *WorkspaceService) SetRunning(ctx context.Context, ownerID, id int64, ru
 	if apiErr != nil {
 		return nil, apiErr
 	}
-	if row.Kind == WorkspaceFinetune {
+	if row.Kind == WorkspaceFinetune || row.Kind == WorkspaceInference {
 		return nil, common.NewAPIErrorStatus(http.StatusConflict, "NOT_SUPPORTED",
-			"A training job cannot be paused; delete it to stop it")
+			"This workspace has no start/stop; delete it to remove it")
 	}
 	if s.cfg.StudioDryRun || s.cluster == nil {
 		return nil, common.NewAPIErrorStatus(http.StatusServiceUnavailable, "STUDIO_DRY_RUN",
@@ -255,9 +274,13 @@ func (s *WorkspaceService) Delete(ctx context.Context, ownerID, id int64) *commo
 	}
 	if !s.cfg.StudioDryRun && s.cluster != nil {
 		var err error
-		if row.Kind == WorkspaceFinetune {
+		switch row.Kind {
+		case WorkspaceFinetune:
 			err = s.cluster.DeleteJob(ctx, row.Namespace, row.Name)
-		} else {
+			_ = s.cluster.DeleteJob(ctx, row.Namespace, row.Name+"-merge")
+		case WorkspaceInference:
+			err = s.cluster.DeleteInferenceService(ctx, row.Namespace, row.Name)
+		default:
 			err = s.cluster.DeleteDevEnvironment(ctx, row.Namespace, row.Name)
 		}
 		if err != nil {
@@ -281,23 +304,40 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 		return
 	}
 	var rows []model.Workspace
-	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped}).
+	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging}).
 		Find(&rows).Error
 	if err != nil {
 		return
 	}
 	for _, row := range rows {
+		if row.Kind == WorkspaceInference {
+			phase, reason, endpoint, ok := s.inferenceState(ctx, row)
+			if !ok || (phase == row.Phase && reason == row.Reason && endpoint == row.Endpoint) {
+				continue
+			}
+			model.DB.Model(&model.Workspace{}).Where("id = ?", row.ID).
+				Updates(map[string]any{"phase": phase, "reason": reason, "endpoint": endpoint})
+			continue
+		}
 		if row.Kind == WorkspaceFinetune {
 			job, found, err := s.cluster.GetJob(ctx, row.Namespace, row.Name)
 			if err != nil || !found {
 				continue
 			}
 			phase, reason := deriveJobPhase(job.Status)
-			if phase == row.Phase && reason == row.Reason {
+			modelVersion := ""
+			if phase == model.WorkspaceSucceeded {
+				// Training finished: merge and register before calling it done.
+				phase, reason, modelVersion = s.advanceFineTune(ctx, row)
+			}
+			if phase == row.Phase && reason == row.Reason && (modelVersion == "" || modelVersion == row.ModelVersion) {
 				continue
 			}
-			model.DB.Model(&model.Workspace{}).Where("id = ?", row.ID).
-				Updates(map[string]any{"phase": phase, "reason": reason})
+			updates := map[string]any{"phase": phase, "reason": reason}
+			if modelVersion != "" {
+				updates["model_version"] = modelVersion
+			}
+			model.DB.Model(&model.Workspace{}).Where("id = ?", row.ID).Updates(updates)
 			continue
 		}
 		env, found, err := s.cluster.GetDevEnvironment(ctx, row.Namespace, row.Name)
@@ -499,15 +539,16 @@ func workspaceAPIError(err error) *common.APIError {
 
 func toWorkspaceDTO(row model.Workspace) WorkspaceDTO {
 	dto := WorkspaceDTO{
-		ID:         row.ID,
-		Kind:       row.Kind,
-		SourceKind: row.SourceKind,
-		SourceName: row.SourceName,
-		Name:       row.Name,
-		Namespace:  row.Namespace,
-		Phase:      row.Phase,
-		Reason:     row.Reason,
-		Endpoint:   row.Endpoint,
+		ID:           row.ID,
+		Kind:         row.Kind,
+		SourceKind:   row.SourceKind,
+		SourceName:   row.SourceName,
+		Name:         row.Name,
+		Namespace:    row.Namespace,
+		Phase:        row.Phase,
+		Reason:       row.Reason,
+		Endpoint:     row.Endpoint,
+		ModelVersion: row.ModelVersion,
 	}
 	if row.Matched != "" {
 		_ = json.Unmarshal([]byte(row.Matched), &dto.Matched)
@@ -626,7 +667,11 @@ func (s *WorkspaceService) checkQuota(ownerID int64) *common.APIError {
 // the base weights read-only, and the adapter under the output path.
 func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (MatchedResources, map[string]any) {
 	datasetPVC := fmt.Sprintf(s.cfg.StudioDatasetPVCPattern, dataset)
-	output := s.cfg.StudioFinetuneOutput + "/" + name
+	// The adapter must live inside the base model's mounted tree: a serving
+	// pod only ever mounts the ModelVersion storage, so anything outside it is
+	// unreachable when the adapter is loaded.
+	adapterDir := adapterSubdir(name)
+	output := basePath + "/" + adapterDir
 	deadline := int(s.cfg.StudioFinetuneDeadline.Seconds())
 	if deadline <= 0 {
 		deadline = 43200
@@ -661,7 +706,7 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 		// runs as uid 1000; the job writes to /out, so it has to be root.
 		"securityContext": map[string]any{"runAsUser": 0, "runAsGroup": 0},
 		"command":         []string{"python3", "/opt/medrouter/train_lora.py"},
-		"args":            s.finetuneArgs(dataset),
+		"args":            s.finetuneArgs(name, dataset),
 		"env":             env,
 		"resources": map[string]any{
 			// The GPU node has ~30Gi allocatable; a 14GB bf16 model loads with
@@ -670,9 +715,9 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 			"limits":   map[string]any{"cpu": "8", "memory": "28Gi", "metax-tech.com/gpu": "1"},
 		},
 		"volumeMounts": []any{
-			map[string]any{"name": "base", "mountPath": "/models/base", "readOnly": true},
+			// Writable: the adapter is written under <base>/.adapters/<name>.
+			map[string]any{"name": "base", "mountPath": "/models/base"},
 			map[string]any{"name": "dataset", "mountPath": "/data/" + dataset, "readOnly": true},
-			map[string]any{"name": "output", "mountPath": "/out"},
 		},
 	}
 	spec := map[string]any{
@@ -687,7 +732,6 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 				"volumes": []any{
 					map[string]any{"name": "base", "hostPath": map[string]any{"path": basePath, "type": "Directory"}},
 					map[string]any{"name": "dataset", "persistentVolumeClaim": map[string]any{"claimName": datasetPVC}},
-					map[string]any{"name": "output", "hostPath": map[string]any{"path": s.cfg.StudioFinetuneOutput, "type": "DirectoryOrCreate"}},
 				},
 			},
 		},
@@ -697,17 +741,23 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 
 // finetuneArgs builds the training command. The row cap is passed explicitly so
 // the deadline stays reachable on a single accelerator.
-func (s *WorkspaceService) finetuneArgs(dataset string) []string {
+func (s *WorkspaceService) finetuneArgs(name, dataset string) []string {
 	args := []string{
 		"--base-model", "/models/base",
 		"--dataset-dir", "/data/" + dataset,
-		"--output-dir", "/out",
+		// One directory per workspace, inside the base tree so the serving pod
+		// can reach it.
+		"--output-dir", "/models/base/" + adapterSubdir(name),
 	}
 	if s.cfg.StudioFinetuneMaxSamples > 0 {
 		args = append(args, "--max-samples", strconv.Itoa(s.cfg.StudioFinetuneMaxSamples))
 	}
 	return args
 }
+
+// adapterSubdir is where one workspace's adapter lives, relative to the base
+// model directory.
+func adapterSubdir(name string) string { return ".adapters/" + name }
 
 // finetuneName is unique per user, like notebook names, because workspaces
 // share one namespace.

@@ -74,6 +74,7 @@ data:
   STUDIO_FINETUNE_OUTPUT_PATH: {{ .Values.studio.finetuneOutputPath | quote }}
   STUDIO_FINETUNE_DEADLINE_SECONDS: {{ .Values.studio.finetuneDeadlineSeconds | quote }}
   STUDIO_FINETUNE_MAX_SAMPLES: {{ .Values.studio.finetuneMaxSamples | quote }}
+  STUDIO_AI_GATEWAY_ROUTER: {{ .Values.studio.gatewayRouter | quote }}
   {{- if eq (toString (default "postgres" .Values.database.mode)) "sqlite" }}
   SQLITE_PATH: "/data/medrouter.db"
   {{- end }}

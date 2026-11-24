@@ -636,7 +636,9 @@
         "stopped": "已停止",
         "failed": "失败",
         "planned": "模拟",
-        "succeeded": "已完成"
+        "succeeded": "已完成",
+        "merging": "合并中",
+        "ready": "已就绪"
       },
       "open": "打开",
       "stop": "停止",

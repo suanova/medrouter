@@ -12,15 +12,21 @@ import (
 )
 
 type fakeNotebooks struct {
-	created  [][3]string // namespace, name, spec JSON is checked separately
-	specs    []map[string]any
-	labels   []map[string]string
-	state    kube.NotebookState
-	found    bool
-	err      error
-	deleted  []string
-	running  []bool
-	jobPhase string
+	created                 [][3]string // namespace, name, spec JSON is checked separately
+	specs                   []map[string]any
+	labels                  []map[string]string
+	state                   kube.NotebookState
+	found                   bool
+	err                     error
+	deleted                 []string
+	running                 []bool
+	jobPhase                string
+	inferenceReady          bool
+	modelVersions           []string
+	modelVersionSpecs       []map[string]any
+	modelVersionAnnotations []map[string]string
+	// jobStates is per-job-name; when nil the fake falls back to (found, jobPhase).
+	jobStates map[string]string
 }
 
 func (f *fakeNotebooks) CreateDevEnvironment(_ context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.DevEnvironment, error) {
@@ -65,9 +71,19 @@ func (f *fakeNotebooks) CreateJob(_ context.Context, namespace, name string, lab
 	return kube.Job{}, nil
 }
 
-func (f *fakeNotebooks) GetJob(_ context.Context, _, _ string) (kube.Job, bool, error) {
+func (f *fakeNotebooks) GetJob(_ context.Context, _, name string) (kube.Job, bool, error) {
 	job := kube.Job{}
-	switch f.jobPhase {
+	phase := f.jobPhase
+	if f.jobStates != nil {
+		value, ok := f.jobStates[name]
+		if !ok {
+			return kube.Job{}, false, f.err
+		}
+		phase = value
+	} else if !f.found {
+		return kube.Job{}, false, f.err
+	}
+	switch phase {
 	case "Running":
 		job.Status.Active = 1
 	case "Succeeded":
@@ -77,12 +93,46 @@ func (f *fakeNotebooks) GetJob(_ context.Context, _, _ string) (kube.Job, bool, 
 		job.Status.Failed = 1
 		job.Status.Conditions = []kube.Condition{{Type: "Failed", Status: "True", Reason: "BackoffLimitExceeded"}}
 	}
-	return job, f.found, f.err
+	return job, true, f.err
 }
 
 func (f *fakeNotebooks) DeleteJob(_ context.Context, _, name string) error {
 	f.deleted = append(f.deleted, name)
 	return f.err
+}
+
+func (f *fakeNotebooks) CreateInferenceService(_ context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.InferenceService, error) {
+	if f.err != nil {
+		return kube.InferenceService{}, f.err
+	}
+	f.created = append(f.created, [3]string{namespace, name, "inference"})
+	f.specs = append(f.specs, spec)
+	f.labels = append(f.labels, labels)
+	return kube.InferenceService{}, nil
+}
+
+func (f *fakeNotebooks) GetInferenceService(_ context.Context, _, _ string) (kube.InferenceService, bool, error) {
+	service := kube.InferenceService{}
+	if f.inferenceReady {
+		service.Status.Conditions = []kube.Condition{{Type: "Ready", Status: "True"}}
+	}
+	return service, f.found, f.err
+}
+
+func (f *fakeNotebooks) DeleteInferenceService(_ context.Context, _, name string) error {
+	f.deleted = append(f.deleted, name)
+	return f.err
+}
+
+func (f *fakeNotebooks) CreateModelVersion(_ context.Context, name string, _ map[string]string, annotations map[string]string, spec map[string]any) error {
+	f.modelVersions = append(f.modelVersions, name)
+	f.modelVersionSpecs = append(f.modelVersionSpecs, spec)
+	f.modelVersionAnnotations = append(f.modelVersionAnnotations, annotations)
+	return f.err
+}
+
+func (f *fakeNotebooks) ModelVersionExists(context.Context, string) (bool, error) {
+	return false, f.err
 }
 
 func studioConfig(dryRun bool) *config.Config {
@@ -97,6 +147,7 @@ func studioConfig(dryRun bool) *config.Config {
 		StudioFinetuneOutput:     "/mnt/cephfs/medrouter/lora",
 		StudioFinetuneDeadline:   12 * time.Hour,
 		StudioFinetuneMaxSamples: 20000,
+		StudioGatewayRouter:      "cubestack-ai-gateway-private",
 	}
 }
 
@@ -337,7 +388,7 @@ func TestWorkspaceFineTuneDryRun(t *testing.T) {
 	if plan.Matched.Dataset != "medmcqa" || plan.Matched.Volume != "medmcqa-data" {
 		t.Fatalf("matched = %+v", plan.Matched)
 	}
-	if plan.Matched.Output != "/mnt/cephfs/medrouter/lora/"+plan.Name {
+	if plan.Matched.Output != "/mnt/cephfs/models/BioMistral-7B/.adapters/"+plan.Name {
 		t.Fatalf("output = %q", plan.Matched.Output)
 	}
 	if list, _ := svc.List(1); len(list) != 0 {
@@ -371,7 +422,8 @@ func TestWorkspaceFineTuneCreatesJob(t *testing.T) {
 	container := template["containers"].([]any)[0].(map[string]any)
 	args := container["args"].([]string)
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--dataset-dir /data/medmcqa") || !strings.Contains(joined, "--output-dir /out") ||
+	if !strings.Contains(joined, "--dataset-dir /data/medmcqa") ||
+		!strings.Contains(joined, "--output-dir /models/base/.adapters/"+workspace.Name) ||
 		!strings.Contains(joined, "--max-samples 20000") {
 		t.Fatalf("args = %v", args)
 	}
@@ -380,7 +432,7 @@ func TestWorkspaceFineTuneCreatesJob(t *testing.T) {
 		t.Fatalf("limits = %+v", resources)
 	}
 	volumes := template["volumes"].([]any)
-	if len(volumes) != 3 {
+	if len(volumes) != 2 {
 		t.Fatalf("volumes = %+v", volumes)
 	}
 }
@@ -394,19 +446,6 @@ func TestWorkspaceFineTuneRejectsIncompatibleDataset(t *testing.T) {
 
 	_, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "chembl")
 	if apiErr == nil || apiErr.Code != "DATASET_NOT_COMPATIBLE" {
-		t.Fatalf("apiErr = %+v", apiErr)
-	}
-}
-
-func TestWorkspaceFineTuneRequiresDataset(t *testing.T) {
-	favoriteTestDB(t)
-	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
-		t.Fatalf("star: %v", apiErr)
-	}
-	svc := finetuneWorkspaceService(t, true, nil, hostPathStorage())
-
-	_, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "  ")
-	if apiErr == nil || apiErr.Code != "DATASET_REQUIRED" {
 		t.Fatalf("apiErr = %+v", apiErr)
 	}
 }
@@ -462,5 +501,199 @@ func TestDeriveJobPhase(t *testing.T) {
 	}
 	if phase, reason := deriveJobPhase(kube.JobStatus{Failed: 1, Reason: "DeadlineExceeded"}); phase != model.WorkspaceFailed || reason != "DeadlineExceeded" {
 		t.Fatalf("failed counter -> %s/%s", phase, reason)
+	}
+}
+
+func deployableModel(context.Context, string) (ModelArtifact, bool) {
+	return ModelArtifact{
+		Name: "biomistral-7b-bf16", Model: "biomistral-7b",
+		Architecture: "mistral", Quantization: "bf16",
+		Storage: hostPathStorage(),
+	}, true
+}
+
+func runtimeProfiles(context.Context) []kube.RuntimeProfile {
+	return []kube.RuntimeProfile{
+		{Metadata: kube.ObjectMeta{Name: "metax-vllm-biomistral"},
+			Spec: kube.RuntimeProfileSpec{
+				Engine:            kube.Engine{Name: "vllm", Version: "0.8"},
+				ModelRequirements: kube.ModelRequirements{Architectures: []string{"mistral"}, Quantization: []string{"bf16"}},
+			}},
+		{Metadata: kube.ObjectMeta{Name: "metax-sglang-biomistral"},
+			Spec: kube.RuntimeProfileSpec{
+				Engine:            kube.Engine{Name: "sglang", Version: "0.5.14"},
+				ModelRequirements: kube.ModelRequirements{Architectures: []string{"mistral"}, Quantization: []string{"bf16"}},
+			}},
+	}
+}
+
+func TestMatchProfilePrefersSGLang(t *testing.T) {
+	profile, ok := matchProfile(runtimeProfiles(context.Background()), "mistral", "bf16")
+	if !ok || profile.Metadata.Name != "metax-sglang-biomistral" {
+		t.Fatalf("profile = %+v ok=%v", profile, ok)
+	}
+	if _, ok := matchProfile(runtimeProfiles(context.Background()), "mistral", "fp16"); ok {
+		t.Fatal("quantization mismatch should not match")
+	}
+	if _, ok := matchProfile(nil, "mistral", "bf16"); ok {
+		t.Fatal("no profiles should not match")
+	}
+}
+
+func TestWorkspaceDeployDryRun(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	svc := NewWorkspaceService(studioConfig(true), nil, nil).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	plan, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	if plan.Kind != WorkspaceInference || plan.Phase != WorkspacePlanned || !plan.DryRun {
+		t.Fatalf("plan = %+v", plan)
+	}
+	if plan.Matched.Profile != "metax-sglang-biomistral" || plan.Matched.ModelVersion != "biomistral-7b-bf16" {
+		t.Fatalf("matched = %+v", plan.Matched)
+	}
+	if plan.Matched.Router != "cubestack-ai-gateway-private" {
+		t.Fatalf("router = %q", plan.Matched.Router)
+	}
+}
+
+func TestWorkspaceDeployCreatesInferenceService(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	if workspace.Kind != WorkspaceInference || workspace.Phase != model.WorkspaceCreating {
+		t.Fatalf("workspace = %+v", workspace)
+	}
+	if len(cluster.created) != 1 || cluster.created[0][2] != "inference" {
+		t.Fatalf("cluster calls = %+v", cluster.created)
+	}
+	spec := cluster.specs[0]
+	if spec["modelRef"] != "biomistral-7b-bf16" || spec["profileRef"] != "metax-sglang-biomistral" {
+		t.Fatalf("spec = %+v", spec)
+	}
+	route := spec["route"].(map[string]any)
+	if route["aigatewayRouter"] != "cubestack-ai-gateway-private" {
+		t.Fatalf("route = %+v", route)
+	}
+}
+
+func TestWorkspaceDeployNeedsMatchingProfile(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "esm2"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	unknown := func(context.Context, string) (ModelArtifact, bool) {
+		return ModelArtifact{Name: "esm2-fp32", Model: "esm2", Architecture: "esm2", Quantization: "fp32", Storage: hostPathStorage()}, true
+	}
+	svc := NewWorkspaceService(studioConfig(true), nil, nil).WithDeployment(unknown, runtimeProfiles)
+
+	_, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "esm2", "")
+	if apiErr == nil || apiErr.Code != "NO_PROFILE" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
+
+func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+
+	// Training succeeded: the adapter is registered directly, no merge job.
+	cluster.jobStates[workspace.Name] = "Succeeded"
+	svc.Reconcile(context.Background())
+
+	list, _ := svc.List(1)
+	if len(list) != 1 || list[0].Phase != model.WorkspaceReady || list[0].ModelVersion != workspace.Name {
+		t.Fatalf("workspace = %+v", list)
+	}
+	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
+		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+	if cluster.modelVersionAnnotations[0]["medrouter.io/lora-adapter"] != ".adapters/"+workspace.Name {
+		t.Fatalf("annotations = %+v", cluster.modelVersionAnnotations[0])
+	}
+	if cluster.modelVersionSpecs[0]["storage"].(map[string]any)["hostPath"].(map[string]any)["path"] != "/mnt/cephfs/models/BioMistral-7B" {
+		t.Fatalf("storage = %+v", cluster.modelVersionSpecs[0]["storage"])
+	}
+}
+
+func TestWorkspaceDeployFineTunedVersionUsesLoRA(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	adapterModel := func(context.Context, string) (ModelArtifact, bool) {
+		return ModelArtifact{
+			Name: "biomistral-7b-medmcqa-u1-lora", Model: "biomistral-7b",
+			Architecture: "mistral", Quantization: "bf16",
+			Storage: hostPathStorage(),
+			Adapter: ".adapters/biomistral-7b-medmcqa-u1-lora",
+		}, true
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(adapterModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	if workspace.Matched.Adapter != ".adapters/biomistral-7b-medmcqa-u1-lora" {
+		t.Fatalf("matched = %+v", workspace.Matched)
+	}
+	/// The adapter is addressed through ${MODEL_PATH}, which the entrypoint
+	/// expands, so the value does not depend on the operator's mount path.
+	overrides := cluster.specs[0]["overrides"].(map[string]any)
+	want := "biomistral-7b-medmcqa-u1-lora=${MODEL_PATH}/.adapters/biomistral-7b-medmcqa-u1-lora"
+	if overrides["lora_paths"] != want {
+		t.Fatalf("lora_paths = %v", overrides["lora_paths"])
+	}
+}
+
+func TestWorkspaceDeployBaseHasNoLoRAOverride(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(deployableModel, runtimeProfiles)
+
+	if _, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", ""); apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	overrides := cluster.specs[0]["overrides"].(map[string]any)
+	if _, ok := overrides["lora_paths"]; ok {
+		t.Fatalf("base deployment must not set lora_paths: %+v", overrides)
 	}
 }
