@@ -143,6 +143,9 @@ type ModelArtifact struct {
 	Architecture string
 	Quantization string
 	Storage      kube.ModelStorage
+	// Adapter is the LoRA adapter directory relative to Storage, when this
+	// version is a fine-tune rather than a standalone model.
+	Adapter string
 }
 
 // Artifact resolves a model or a specific ModelVersion name. When given a model
@@ -179,6 +182,7 @@ func (c *ModelCatalog) Artifact(ctx context.Context, ref string) (ModelArtifact,
 		Architecture: match.Spec.Architecture,
 		Quantization: match.Spec.Quantization,
 		Storage:      match.Spec.Storage,
+		Adapter:      match.Metadata.Annotations["medrouter.io/lora-adapter"],
 	}, true
 }
 

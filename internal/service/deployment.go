@@ -101,11 +101,19 @@ func (s *WorkspaceService) createInference(ctx context.Context, ownerID int64, r
 		Profile:      profile.Metadata.Name,
 		ModelVersion: artifact.Name,
 		Router:       s.cfg.StudioGatewayRouter,
+		Adapter:      artifact.Adapter,
+	}
+	overrides := map[string]any{}
+	if artifact.Adapter != "" {
+		// ${MODEL_PATH} is expanded by the entrypoint's shell at runtime, so
+		// the adapter path does not depend on where the operator mounts the
+		// model.
+		overrides["lora_paths"] = artifact.Name + "=${MODEL_PATH}/" + artifact.Adapter
 	}
 	spec := map[string]any{
 		"modelRef":   artifact.Name,
 		"profileRef": profile.Metadata.Name,
-		"overrides":  map[string]any{},
+		"overrides":  overrides,
 		"route": map[string]any{
 			"aigatewayRouter": s.cfg.StudioGatewayRouter,
 			"modelName":       name,
@@ -175,9 +183,9 @@ func (s *WorkspaceService) inferenceState(ctx context.Context, row model.Workspa
 	return model.WorkspaceCreating, "", endpoint, true
 }
 
-// advanceFineTune drives the post-training steps: merge the adapter into a full
-// model, register it as a ModelVersion, then mark the workspace ready. It is
-// idempotent, so the reconciler can call it on every tick.
+// advanceFineTune registers the adapter as a ModelVersion once training
+// succeeds. There is no merge step: the serving profile loads the adapter
+// through --lora-paths, and the adapter already lives inside the base tree.
 func (s *WorkspaceService) advanceFineTune(ctx context.Context, row model.Workspace) (phase, reason, modelVersion string) {
 	if row.ModelVersion != "" {
 		return model.WorkspaceReady, "", row.ModelVersion
@@ -189,95 +197,16 @@ func (s *WorkspaceService) advanceFineTune(ctx context.Context, row model.Worksp
 	if !ok {
 		return model.WorkspaceFailed, "BASE_MODEL_MISSING", ""
 	}
-
-	mergeName := row.Name + "-merge"
-	mergeJob, found, err := s.cluster.GetJob(ctx, row.Namespace, mergeName)
-	if err != nil {
-		return model.WorkspaceMerging, "", ""
-	}
-	if !found {
-		spec, apiErr := s.mergeJobSpec(row, artifact)
-		if apiErr != nil {
-			return model.WorkspaceFailed, apiErr.Code, ""
-		}
-		labels := map[string]string{
-			"app.kubernetes.io/managed-by": "medrouter",
-			"medrouter.io/kind":            "merge",
-			"medrouter.io/workspace":       row.Name,
-		}
-		if _, err := s.cluster.CreateJob(ctx, row.Namespace, mergeName, labels, spec); err != nil {
-			return model.WorkspaceMerging, "MERGE_CREATE_FAILED", ""
-		}
-		return model.WorkspaceMerging, "", ""
-	}
-
-	mergePhase, mergeReason := deriveJobPhase(mergeJob.Status)
-	switch mergePhase {
-	case model.WorkspaceFailed:
-		return model.WorkspaceFailed, mergeReason, ""
-	case model.WorkspaceSucceeded:
-	default:
-		return model.WorkspaceMerging, "", ""
-	}
-
 	if apiErr := s.registerModelVersion(ctx, row, artifact); apiErr != nil {
 		return model.WorkspaceFailed, apiErr.Code, ""
 	}
 	return model.WorkspaceReady, "", row.Name
 }
 
-// mergeJobSpec folds the adapter into the base weights so an existing serving
-// profile can load the result. The merge runs on CPU: it needs no accelerator.
-func (s *WorkspaceService) mergeJobSpec(row model.Workspace, artifact ModelArtifact) (map[string]any, *common.APIError) {
-	if artifact.Storage.Strategy != "HostPath" || artifact.Storage.HostPath == nil || artifact.Storage.HostPath.Path == "" {
-		return nil, common.NewAPIErrorStatus(http.StatusConflict, "MODEL_STORAGE_UNSUPPORTED",
-			"The base weights are not on a host path")
-	}
-	container := map[string]any{
-		"name":            "merge",
-		"image":           s.cfg.StudioFinetuneImage,
-		"securityContext": map[string]any{"runAsUser": 0, "runAsGroup": 0},
-		"command":         []string{"python3", "/scripts/merge_lora.py"},
-		"args": []string{
-			"--base-model", "/models/base",
-			"--adapter", "/lora/" + row.Name,
-			"--output-dir", "/merged/" + row.Name,
-		},
-		"resources": map[string]any{
-			"requests": map[string]any{"cpu": "6", "memory": "16Gi"},
-			"limits":   map[string]any{"cpu": "6", "memory": "26Gi"},
-		},
-		"volumeMounts": []any{
-			map[string]any{"name": "scripts", "mountPath": "/scripts", "readOnly": true},
-			map[string]any{"name": "base", "mountPath": "/models/base", "readOnly": true},
-			map[string]any{"name": "lora", "mountPath": "/lora", "readOnly": true},
-			map[string]any{"name": "merged", "mountPath": "/merged"},
-		},
-	}
-	spec := map[string]any{
-		"backoffLimit":            1,
-		"activeDeadlineSeconds":   int64(3600),
-		"ttlSecondsAfterFinished": 604800,
-		"template": map[string]any{
-			"metadata": map[string]any{"labels": map[string]string{"medrouter.io/workspace": row.Name}},
-			"spec": map[string]any{
-				"restartPolicy": "Never",
-				"containers":    []any{container},
-				"volumes": []any{
-					map[string]any{"name": "scripts", "configMap": map[string]any{"name": s.cfg.StudioMergeScript}},
-					map[string]any{"name": "base", "hostPath": map[string]any{"path": artifact.Storage.HostPath.Path, "type": "Directory"}},
-					map[string]any{"name": "lora", "hostPath": map[string]any{"path": s.cfg.StudioFinetuneOutput, "type": "Directory"}},
-					map[string]any{"name": "merged", "hostPath": map[string]any{"path": s.cfg.StudioModelOutput, "type": "DirectoryOrCreate"}},
-				},
-			},
-		},
-	}
-	return spec, nil
-}
-
-// registerModelVersion makes the merged model discoverable and deployable. The
-// base family is preserved (same spec.model) so it appears as a version of the
-// original model; lineage lives in annotations.
+// registerModelVersion makes the adapter discoverable and deployable. The base
+// family is preserved (same spec.model) so it appears as a version of the
+// original model; the storage stays the base directory and the annotation tells
+// the deployment where the adapter sits inside it.
 func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.Workspace, artifact ModelArtifact) *common.APIError {
 	exists, err := s.cluster.ModelVersionExists(ctx, row.Name)
 	if err != nil {
@@ -293,6 +222,7 @@ func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.W
 		"medrouter.io/base-modelversion": artifact.Name,
 		"medrouter.io/finetune-method":   "lora",
 		"medrouter.io/finetune-job":      row.Name,
+		"medrouter.io/lora-adapter":      adapterSubdir(row.Name),
 	}
 	if matched.Dataset != "" {
 		annotations["medrouter.io/finetune-dataset"] = matched.Dataset
@@ -306,9 +236,11 @@ func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.W
 		"version":      row.Name,
 		"architecture": artifact.Architecture,
 		"quantization": artifact.Quantization,
+		// Same weights as the base: the adapter is a directory inside this
+		// mount, which is what the serving pod needs.
 		"storage": map[string]any{
 			"strategy": "HostPath",
-			"hostPath": map[string]any{"path": s.cfg.StudioModelOutput + "/" + row.Name},
+			"hostPath": map[string]any{"path": artifact.Storage.HostPath.Path},
 		},
 	}
 	if err := s.cluster.CreateModelVersion(ctx, row.Name, labels, annotations, spec); err != nil {

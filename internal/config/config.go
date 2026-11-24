@@ -148,10 +148,8 @@ type Config struct {
 	// StudioFinetuneMaxSamples caps the training rows. A single MXC550 runs
 	// about 2 samples/s, so the full 182k-row MedMCQA set would need ~50h.
 	StudioFinetuneMaxSamples int
-	// Post-training: the adapter is merged into a full model so the existing
-	// serving profiles can deploy it, then registered as a ModelVersion.
-	StudioModelOutput   string
-	StudioMergeScript   string
+	// StudioGatewayRouter is the AI gateway router an InferenceService
+	// publishes through.
 	StudioGatewayRouter string
 }
 
@@ -287,8 +285,6 @@ func Load() (*Config, error) {
 		StudioFinetuneOutput:     strings.TrimRight(getenv("STUDIO_FINETUNE_OUTPUT_PATH", "/data/medrouter/lora"), "/"),
 		StudioFinetuneDeadline:   secondsEnv("STUDIO_FINETUNE_DEADLINE_SECONDS", 43200),
 		StudioFinetuneMaxSamples: intEnv("STUDIO_FINETUNE_MAX_SAMPLES", 20000),
-		StudioModelOutput:        strings.TrimRight(getenv("STUDIO_MODEL_OUTPUT_PATH", "/data/medrouter/models"), "/"),
-		StudioMergeScript:        getenv("STUDIO_MERGE_SCRIPT_CONFIGMAP", "medrouter-merge-script"),
 		StudioGatewayRouter:      getenv("STUDIO_AI_GATEWAY_ROUTER", "cubestack-ai-gateway-private"),
 	}
 

@@ -78,6 +78,7 @@ type MatchedResources struct {
 	Profile      string `json:"profile,omitempty"`
 	ModelVersion string `json:"model_version,omitempty"`
 	Router       string `json:"router,omitempty"`
+	Adapter      string `json:"adapter,omitempty"`
 }
 
 // WorkspaceDTO is the API shape of one workspace.
@@ -666,7 +667,11 @@ func (s *WorkspaceService) checkQuota(ownerID int64) *common.APIError {
 // the base weights read-only, and the adapter under the output path.
 func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (MatchedResources, map[string]any) {
 	datasetPVC := fmt.Sprintf(s.cfg.StudioDatasetPVCPattern, dataset)
-	output := s.cfg.StudioFinetuneOutput + "/" + name
+	// The adapter must live inside the base model's mounted tree: a serving
+	// pod only ever mounts the ModelVersion storage, so anything outside it is
+	// unreachable when the adapter is loaded.
+	adapterDir := adapterSubdir(name)
+	output := basePath + "/" + adapterDir
 	deadline := int(s.cfg.StudioFinetuneDeadline.Seconds())
 	if deadline <= 0 {
 		deadline = 43200
@@ -710,9 +715,9 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 			"limits":   map[string]any{"cpu": "8", "memory": "28Gi", "metax-tech.com/gpu": "1"},
 		},
 		"volumeMounts": []any{
-			map[string]any{"name": "base", "mountPath": "/models/base", "readOnly": true},
+			// Writable: the adapter is written under <base>/.adapters/<name>.
+			map[string]any{"name": "base", "mountPath": "/models/base"},
 			map[string]any{"name": "dataset", "mountPath": "/data/" + dataset, "readOnly": true},
-			map[string]any{"name": "output", "mountPath": "/out"},
 		},
 	}
 	spec := map[string]any{
@@ -727,7 +732,6 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 				"volumes": []any{
 					map[string]any{"name": "base", "hostPath": map[string]any{"path": basePath, "type": "Directory"}},
 					map[string]any{"name": "dataset", "persistentVolumeClaim": map[string]any{"claimName": datasetPVC}},
-					map[string]any{"name": "output", "hostPath": map[string]any{"path": s.cfg.StudioFinetuneOutput, "type": "DirectoryOrCreate"}},
 				},
 			},
 		},
@@ -741,15 +745,19 @@ func (s *WorkspaceService) finetuneArgs(name, dataset string) []string {
 	args := []string{
 		"--base-model", "/models/base",
 		"--dataset-dir", "/data/" + dataset,
-		// One directory per workspace: sharing /out would make two runs
-		// overwrite each other's adapter.
-		"--output-dir", "/out/" + name,
+		// One directory per workspace, inside the base tree so the serving pod
+		// can reach it.
+		"--output-dir", "/models/base/" + adapterSubdir(name),
 	}
 	if s.cfg.StudioFinetuneMaxSamples > 0 {
 		args = append(args, "--max-samples", strconv.Itoa(s.cfg.StudioFinetuneMaxSamples))
 	}
 	return args
 }
+
+// adapterSubdir is where one workspace's adapter lives, relative to the base
+// model directory.
+func adapterSubdir(name string) string { return ".adapters/" + name }
 
 // finetuneName is unique per user, like notebook names, because workspaces
 // share one namespace.

@@ -12,17 +12,19 @@ import (
 )
 
 type fakeNotebooks struct {
-	created        [][3]string // namespace, name, spec JSON is checked separately
-	specs          []map[string]any
-	labels         []map[string]string
-	state          kube.NotebookState
-	found          bool
-	err            error
-	deleted        []string
-	running        []bool
-	jobPhase       string
-	inferenceReady bool
-	modelVersions  []string
+	created                 [][3]string // namespace, name, spec JSON is checked separately
+	specs                   []map[string]any
+	labels                  []map[string]string
+	state                   kube.NotebookState
+	found                   bool
+	err                     error
+	deleted                 []string
+	running                 []bool
+	jobPhase                string
+	inferenceReady          bool
+	modelVersions           []string
+	modelVersionSpecs       []map[string]any
+	modelVersionAnnotations []map[string]string
 	// jobStates is per-job-name; when nil the fake falls back to (found, jobPhase).
 	jobStates map[string]string
 }
@@ -122,8 +124,10 @@ func (f *fakeNotebooks) DeleteInferenceService(_ context.Context, _, name string
 	return f.err
 }
 
-func (f *fakeNotebooks) CreateModelVersion(_ context.Context, name string, _, _ map[string]string, _ map[string]any) error {
+func (f *fakeNotebooks) CreateModelVersion(_ context.Context, name string, _ map[string]string, annotations map[string]string, spec map[string]any) error {
 	f.modelVersions = append(f.modelVersions, name)
+	f.modelVersionSpecs = append(f.modelVersionSpecs, spec)
+	f.modelVersionAnnotations = append(f.modelVersionAnnotations, annotations)
 	return f.err
 }
 
@@ -384,7 +388,7 @@ func TestWorkspaceFineTuneDryRun(t *testing.T) {
 	if plan.Matched.Dataset != "medmcqa" || plan.Matched.Volume != "medmcqa-data" {
 		t.Fatalf("matched = %+v", plan.Matched)
 	}
-	if plan.Matched.Output != "/mnt/cephfs/medrouter/lora/"+plan.Name {
+	if plan.Matched.Output != "/mnt/cephfs/models/BioMistral-7B/.adapters/"+plan.Name {
 		t.Fatalf("output = %q", plan.Matched.Output)
 	}
 	if list, _ := svc.List(1); len(list) != 0 {
@@ -419,7 +423,7 @@ func TestWorkspaceFineTuneCreatesJob(t *testing.T) {
 	args := container["args"].([]string)
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--dataset-dir /data/medmcqa") ||
-		!strings.Contains(joined, "--output-dir /out/"+workspace.Name) ||
+		!strings.Contains(joined, "--output-dir /models/base/.adapters/"+workspace.Name) ||
 		!strings.Contains(joined, "--max-samples 20000") {
 		t.Fatalf("args = %v", args)
 	}
@@ -428,7 +432,7 @@ func TestWorkspaceFineTuneCreatesJob(t *testing.T) {
 		t.Fatalf("limits = %+v", resources)
 	}
 	volumes := template["volumes"].([]any)
-	if len(volumes) != 3 {
+	if len(volumes) != 2 {
 		t.Fatalf("volumes = %+v", volumes)
 	}
 }
@@ -626,25 +630,8 @@ func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
 		t.Fatalf("Create: %v", apiErr)
 	}
 
-	// Training done: the first reconcile creates the merge job.
+	// Training succeeded: the adapter is registered directly, no merge job.
 	cluster.jobStates[workspace.Name] = "Succeeded"
-	svc.Reconcile(context.Background())
-	mergeJob := workspace.Name + "-merge"
-	if _, ok := cluster.jobStates[mergeJob]; ok {
-		t.Fatal("merge job state should not be set yet")
-	}
-	found := false
-	for _, created := range cluster.created {
-		if created[1] == mergeJob {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("merge job not created: %+v", cluster.created)
-	}
-
-	// Merge done: the ModelVersion is registered and the workspace becomes ready.
-	cluster.jobStates[mergeJob] = "Succeeded"
 	svc.Reconcile(context.Background())
 
 	list, _ := svc.List(1)
@@ -653,5 +640,60 @@ func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
 	}
 	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
 		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+	if cluster.modelVersionAnnotations[0]["medrouter.io/lora-adapter"] != ".adapters/"+workspace.Name {
+		t.Fatalf("annotations = %+v", cluster.modelVersionAnnotations[0])
+	}
+	if cluster.modelVersionSpecs[0]["storage"].(map[string]any)["hostPath"].(map[string]any)["path"] != "/mnt/cephfs/models/BioMistral-7B" {
+		t.Fatalf("storage = %+v", cluster.modelVersionSpecs[0]["storage"])
+	}
+}
+
+func TestWorkspaceDeployFineTunedVersionUsesLoRA(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	adapterModel := func(context.Context, string) (ModelArtifact, bool) {
+		return ModelArtifact{
+			Name: "biomistral-7b-medmcqa-u1-lora", Model: "biomistral-7b",
+			Architecture: "mistral", Quantization: "bf16",
+			Storage: hostPathStorage(),
+			Adapter: ".adapters/biomistral-7b-medmcqa-u1-lora",
+		}, true
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(adapterModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	if workspace.Matched.Adapter != ".adapters/biomistral-7b-medmcqa-u1-lora" {
+		t.Fatalf("matched = %+v", workspace.Matched)
+	}
+	/// The adapter is addressed through ${MODEL_PATH}, which the entrypoint
+	/// expands, so the value does not depend on the operator's mount path.
+	overrides := cluster.specs[0]["overrides"].(map[string]any)
+	want := "biomistral-7b-medmcqa-u1-lora=${MODEL_PATH}/.adapters/biomistral-7b-medmcqa-u1-lora"
+	if overrides["lora_paths"] != want {
+		t.Fatalf("lora_paths = %v", overrides["lora_paths"])
+	}
+}
+
+func TestWorkspaceDeployBaseHasNoLoRAOverride(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(deployableModel, runtimeProfiles)
+
+	if _, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", ""); apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	overrides := cluster.specs[0]["overrides"].(map[string]any)
+	if _, ok := overrides["lora_paths"]; ok {
+		t.Fatalf("base deployment must not set lora_paths: %+v", overrides)
 	}
 }
