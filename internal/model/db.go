@@ -82,7 +82,7 @@ func InitDB(cfg *config.Config) error {
 		log.Printf("database: sqlite path=%s", cfg.SQLitePath)
 	}
 
-	if err := db.AutoMigrate(&User{}, &UserSession{}, &VerificationCode{}, &OAuthBinding{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &UserSession{}, &VerificationCode{}, &OAuthBinding{}, &Favorite{}, &Workspace{}); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
 	DB = db

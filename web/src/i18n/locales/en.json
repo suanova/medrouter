@@ -594,82 +594,124 @@
   "studio": {
     "kicker": "STUDIO · WORKSPACE",
     "title": "Studio",
-    "lead": "Browse the model and dataset catalogs, then check what is available in this deployment. Runtime, quota and workspace details are not available here yet.",
+    "lead": "Star the models and datasets you care about, then start them from here. The runtime, the card count and the image are matched for you — there is nothing to configure.",
     "headNotes": {
-      "models_one": "{{count}} model",
-      "models_other": "{{count}} models",
-      "datasets_one": "{{count}} dataset",
-      "datasets_other": "{{count}} datasets",
-      "runtime": "runtime not connected"
+      "running": "{{count}} running",
+      "favorites": "{{count}} starred"
     },
     "actions": {
-      "models": "Browse models",
-      "datasets": "Browse datasets"
-    },
-    "console": {
-      "kicker": "RUNTIME · INFERENCE SERVICE",
-      "title": "Runtime is not connected yet",
-      "status": "Not connected",
-      "text": "The model and dataset catalogs are available here. Runtime status, development workspaces, GPU quota and audit logs are not connected, so there are no live usage figures to show.",
-      "fields": {
-        "inference": "Inference",
-        "workspace": "Workspace",
-        "quota": "GPU quota",
-        "logs": "Audit log"
-      },
-      "values": {
-        "planned": "Not connected"
-      }
-    },
-    "recent": {
       "models": "Models",
-      "datasets": "Datasets",
-      "count_one": "{{count}} in catalog",
-      "count_other": "{{count}} in catalog",
-      "empty": "This catalog has no entries yet.",
-      "unavailable": "Catalog unavailable ({{reason}})."
+      "datasets": "Datasets"
     },
-    "status": {
-      "kicker": "CONNECTIONS",
-      "title": "Connection status",
-      "models": "Model catalog",
-      "datasets": "Dataset catalog",
-      "runtime": "Runtime",
-      "states": {
-        "connected": "Connected",
-        "pending": "Loading…",
-        "unavailable": "Unavailable",
-        "notConnected": "Not connected"
+    "favorites": {
+      "title": "Starred",
+      "note": "One click to start",
+      "emptyTitle": "Nothing starred yet",
+      "emptyText": "Star a model or dataset in the catalog and it shows up here, ready to start.",
+      "browse": "Browse models",
+      "kinds": {
+        "model": "Model",
+        "dataset": "Dataset"
       },
-      "note": "Status reflects this page's live catalog requests. Runtime data has no endpoint yet."
+      "deploy": "Deploy",
+      "start": "Start environment",
+      "starting": "Starting…",
+      "matching": "Matching compute for {{name}}…",
+      "autoMatchInference": "Runtime, engine and cards are matched automatically",
+      "autoMatchNotebook": "Size, image and cards are matched automatically",
+      "signInTitle": "Sign in to see your studio",
+      "signInText": "Favorites and workbenches belong to your account.",
+      "signIn": "Sign in",
+      "errorTitle": "Your favorites could not be loaded",
+      "errorText": "Try again in a moment.",
+      "retry": "Try again",
+      "finetune": "Fine-tune"
     },
-    "start": {
-      "title": "Start here",
-      "note": "All entries are live pages",
-      "models": {
-        "title": "Model library",
-        "text": "Compare weights, runtime constraints and licenses before creating an inference instance.",
-        "cta": "Open models",
-        "meta_one": "{{count}} model",
-        "meta_other": "{{count}} models"
+    "workspace": {
+      "title": "Workbenches",
+      "emptyTitle": "No workbenches yet",
+      "emptyText": "Start something from your starred models or datasets above.",
+      "kinds": {
+        "notebook": "Development environment",
+        "inference": "Inference",
+        "finetune": "Fine-tune"
       },
-      "datasets": {
-        "title": "Dataset library",
-        "text": "Review the listed access terms and dataset details. De-identification and ethics information depends on what the publisher provides.",
-        "cta": "Open datasets",
-        "meta_one": "{{count}} dataset",
-        "meta_other": "{{count}} datasets"
+      "phases": {
+        "creating": "Creating",
+        "running": "Running",
+        "stopped": "Stopped",
+        "failed": "Failed",
+        "planned": "Planned",
+        "succeeded": "Succeeded"
       },
-      "dashboard": {
-        "title": "My workspace",
-        "text": "Account details, sign-in state and session settings for your MedRouter account.",
-        "cta": "Open dashboard",
-        "meta": "Sign-in required"
-      },
-      "unavailable": "Catalog unavailable"
+      "open": "Open",
+      "stop": "Stop",
+      "start": "Start",
+      "delete": "Delete",
+      "deleted": "{{name}} deleted.",
+      "note": "One click from a star",
+      "created": "{{name}} is being created.",
+      "actionFailed": "The action could not be completed.",
+      "noEndpoint": "This workspace has no endpoint yet.",
+      "errorTitle": "Workspaces could not be loaded",
+      "errorText": "Try again in a moment."
     },
     "footer": {
-      "source": "Catalog data · Models · Datasets"
+      "source": "Workbenches · Starred"
+    },
+    "plan": {
+      "kicker": "Dry run · nothing created",
+      "title": "What would be created",
+      "name": "Name",
+      "namespace": "Namespace",
+      "image": "Image",
+      "resources": "CPU · memory",
+      "storage": "Workspace disk",
+      "volume": "Dataset volume",
+      "dataset": "Dataset size",
+      "idle": "Idle stop",
+      "note": "Studio is in dry-run mode: these are the resources the backend matched, and no Custom Resource was created.",
+      "close": "Close"
+    },
+    "finetune": {
+      "kicker": "Fine-tune",
+      "title": "Fine-tune",
+      "subtitle": "Choose the training data for {{model}}.",
+      "dataset": "Training data",
+      "inferred": "inferred",
+      "method": "Method",
+      "methodValue": "LoRA",
+      "hardware": "Hardware",
+      "hardwareValue": "1 × MXC550 · 64 GB",
+      "recipe": "Recipe",
+      "recipeValue": "r=16 · α=32 · lr=2e-4 · 2 epochs",
+      "tasksLabel": "Supported tasks",
+      "notReady": "Training uses one accelerator; progress appears in the workbench list.",
+      "submit": "Start training",
+      "close": "Close",
+      "loading": "Loading compatible datasets…",
+      "loadFailed": "The compatibility data could not be loaded.",
+      "unavailableTitle": "Fine-tuning is not available",
+      "noDatasetTitle": "No compatible dataset",
+      "noDatasetText": "No dataset in the catalog matches this model's tasks.",
+      "reasons": {
+        "NO_RECIPE": "This model has no training recipe yet.",
+        "MODEL_NOT_FOUND": "This model is not in the catalog.",
+        "CATALOG_UNAVAILABLE": "The catalog is unavailable right now.",
+        "default": "Fine-tuning is not available for this model."
+      },
+      "tasks": {
+        "text-qa": "Text QA",
+        "text-classification": "Text classification",
+        "sequence": "Sequence",
+        "structure": "Structure",
+        "molecule": "Molecule",
+        "scrna": "Single-cell",
+        "vqa": "Vision-language"
+      },
+      "planOutput": "Artifact path",
+      "planDeadline": "Timeout",
+      "dryRunNote": "Dry run: no training job was created. This is what would be launched."
     }
   },
   "home": {
@@ -929,5 +971,14 @@
       },
       "source": "Model and dataset catalog"
     }
+  },
+  "favorites": {
+    "add": "Add to studio",
+    "remove": "Remove from studio",
+    "star": "Star",
+    "starred": "Starred",
+    "added": "{{name}} added to your studio.",
+    "removed": "{{name}} removed from your studio.",
+    "failed": "Could not update the favorite."
   }
 }

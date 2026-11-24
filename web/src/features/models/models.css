@@ -1901,3 +1901,14 @@
 .ml-bench-table th {
   font-weight: 600;
 }
+
+.ml-scope .ml-btn.is-starred {
+  color: var(--ml-accent-ink);
+  border-color: color-mix(in oklch, var(--ml-accent) 45%, var(--ml-border));
+  background: var(--ml-accent-soft);
+}
+
+.ml-scope .ml-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

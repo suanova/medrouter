@@ -2,6 +2,8 @@ import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Check, Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { StarButton } from '@/features/favorites/star-button'
+
 import { formatRelativeTime, initials } from '../format'
 import { modelDescription } from '../labels'
 import type { ModelDetail } from '../types'
@@ -62,6 +64,7 @@ export function DetailHeader({ detail, copied, onCopy }: DetailHeaderProps) {
             <ArrowLeft aria-hidden='true' />
             {t('models.detail.back')}
           </Link>
+          <StarButton kind='model' name={detail.model} />
           <button type='button' className='ml-btn ml-btn-primary' onClick={onCopy}>
             {copied ? <Check aria-hidden='true' /> : <Copy aria-hidden='true' />}
             {copied ? t('models.detail.copied') : t('models.detail.copy')}

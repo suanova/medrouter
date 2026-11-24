@@ -1,0 +1,16 @@
+# Pinned as a set for Python 3.12 / torch 2.8 on the MACA base image.
+# These versions resolve together (trl 1.18 needs transformers>=4.56.2,
+# <=5.1.0 excluded; transformers 5.24 needs torch>=2.6). Bump them together,
+# never one at a time.
+transformers==5.24.0
+peft==0.22.0
+trl==1.18.2
+datasets==5.2.0
+accelerate==1.16.0
+pyarrow==26.0.1
+# pyarrow 26 needs the numpy 2 ABI; the base image ships numpy 1.26.4. torch
+# 2.8.0+metax3.8.5.1 was verified to run on numpy 2.5.5.
+numpy>=2,<3
+safetensors==0.8.0
+sentencepiece==0.2.3
+pandas>=2.2,<3

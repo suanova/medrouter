@@ -135,6 +135,22 @@ func (c *ModelCatalog) ResolveVersionStorage(ctx context.Context, name, versionR
 	}, true, status
 }
 
+// StorageOf returns the storage block of the first version representing a
+// model. The studio uses it to mount base weights for fine-tuning; it is not
+// part of the public API shape.
+func (c *ModelCatalog) StorageOf(ctx context.Context, model string) (kube.ModelStorage, bool) {
+	snap := c.snapshot(ctx)
+	if !snap.available {
+		return kube.ModelStorage{}, false
+	}
+	for _, version := range snap.mvs {
+		if version.Spec.Model == model || version.Metadata.Name == model {
+			return version.Spec.Storage, true
+		}
+	}
+	return kube.ModelStorage{}, false
+}
+
 func (c *ModelCatalog) snapshot(ctx context.Context) *catalogSnapshot {
 	now := c.now()
 	c.mu.Lock()

@@ -588,77 +588,124 @@
   "studio": {
     "kicker": "STUDIO · 工作室",
     "title": "工作室",
-    "lead": "浏览模型和数据集目录，了解当前部署中有哪些内容。运行状态、配额和工作区信息目前还无法查看。",
+    "lead": "先收藏你在意的模型或数据集，然后在这里一键启动。运行时、卡数和镜像都由后台匹配，不需要你做选择。",
     "headNotes": {
-      "models": "{{count}} 个模型",
-      "datasets": "{{count}} 个数据集",
-      "runtime": "运行态未接入"
+      "running": "{{count}} 个运行中",
+      "favorites": "已收藏 {{count}} 个"
     },
     "actions": {
-      "models": "浏览模型",
-      "datasets": "浏览数据集"
-    },
-    "console": {
-      "kicker": "RUNTIME · 推理服务",
-      "title": "运行态尚未接入",
-      "status": "未接入",
-      "text": "这里可以查看模型和数据集目录。运行状态、开发环境、GPU 配额和审计日志尚未接入，因此暂时没有实时使用数据。",
-      "fields": {
-        "inference": "推理实例",
-        "workspace": "开发环境",
-        "quota": "GPU 配额",
-        "logs": "审计日志"
-      },
-      "values": {
-        "planned": "未接入"
-      }
-    },
-    "recent": {
       "models": "模型",
-      "datasets": "数据集",
-      "count": "共 {{count}} 项",
-      "empty": "该目录还没有条目。",
-      "unavailable": "目录不可用（{{reason}}）。"
+      "datasets": "数据集"
     },
-    "status": {
-      "kicker": "CONNECTIONS",
-      "title": "接入状态",
-      "models": "模型目录",
-      "datasets": "数据集目录",
-      "runtime": "运行态",
-      "states": {
-        "connected": "已接入",
-        "pending": "读取中…",
-        "unavailable": "不可用",
-        "notConnected": "未接入"
+    "favorites": {
+      "title": "我的收藏",
+      "note": "一键启动",
+      "emptyTitle": "还没有收藏",
+      "emptyText": "在模型或数据集目录里收藏一个，它就会出现在这里，随时可以启动。",
+      "browse": "去浏览模型",
+      "kinds": {
+        "model": "模型",
+        "dataset": "数据集"
       },
-      "note": "目录状态来自本页的实时请求；运行态还没有可用接口。"
+      "deploy": "一键部署",
+      "start": "启动开发环境",
+      "starting": "正在启动…",
+      "matching": "正在为 {{name}} 匹配算力…",
+      "autoMatchInference": "运行时、引擎与显卡自动匹配",
+      "autoMatchNotebook": "规格、镜像与显卡自动匹配",
+      "signInTitle": "登录后查看你的工作室",
+      "signInText": "收藏和工作台都属于你的账号。",
+      "signIn": "去登录",
+      "errorTitle": "收藏加载失败",
+      "errorText": "请稍后重试。",
+      "retry": "重试",
+      "finetune": "微调"
     },
-    "start": {
-      "title": "从这里开始",
-      "note": "均为已上线的页面",
-      "models": {
-        "title": "模型库",
-        "text": "比较权重、运行时约束与许可证，确认可以部署的模型。",
-        "cta": "打开模型库",
-        "meta": "{{count}} 个模型"
+    "workspace": {
+      "title": "工作台",
+      "emptyTitle": "还没有工作台",
+      "emptyText": "从上面收藏的模型或数据集一键启动一个。",
+      "kinds": {
+        "notebook": "开发环境",
+        "inference": "推理服务",
+        "finetune": "微调"
       },
-      "datasets": {
-        "title": "数据集库",
-        "text": "可按公开、申请或受控等访问条件筛选；去标识化与伦理信息以数据集条目说明为准。",
-        "cta": "打开数据集库",
-        "meta": "{{count}} 个数据集"
+      "phases": {
+        "creating": "创建中",
+        "running": "运行中",
+        "stopped": "已停止",
+        "failed": "失败",
+        "planned": "模拟",
+        "succeeded": "已完成"
       },
-      "dashboard": {
-        "title": "我的工作台",
-        "text": "账号信息、登录状态与会话设置。",
-        "cta": "打开工作台",
-        "meta": "需登录"
-      },
-      "unavailable": "目录不可用"
+      "open": "打开",
+      "stop": "停止",
+      "start": "启动",
+      "delete": "删除",
+      "deleted": "已删除 {{name}}。",
+      "note": "收藏后一键启动",
+      "created": "{{name}} 正在创建。",
+      "actionFailed": "操作未能完成。",
+      "noEndpoint": "这个工作台还没有入口地址。",
+      "errorTitle": "工作台加载失败",
+      "errorText": "请稍后重试。"
     },
     "footer": {
-      "source": "目录内容 · 模型 · 数据集"
+      "source": "工作台 · 收藏"
+    },
+    "plan": {
+      "kicker": "模拟 · 未创建资源",
+      "title": "将会创建",
+      "name": "名称",
+      "namespace": "命名空间",
+      "image": "镜像",
+      "resources": "CPU · 内存",
+      "storage": "工作盘",
+      "volume": "数据集卷",
+      "dataset": "数据集大小",
+      "idle": "空闲停止",
+      "note": "工作室处于模拟模式：以上是后台匹配到的资源，没有创建任何 CR。",
+      "close": "关闭"
+    },
+    "finetune": {
+      "kicker": "微调",
+      "title": "微调",
+      "subtitle": "为 {{model}} 选择训练数据。",
+      "dataset": "训练数据",
+      "inferred": "按格式推断",
+      "method": "训练方式",
+      "methodValue": "LoRA",
+      "hardware": "算力",
+      "hardwareValue": "1 × MXC550 · 64 GB",
+      "recipe": "配方",
+      "recipeValue": "r=16 · α=32 · lr=2e-4 · 2 轮",
+      "tasksLabel": "支持的任务",
+      "notReady": "训练会占用 1 张加速卡；提交后可在工作台查看进度。",
+      "submit": "开始训练",
+      "close": "关闭",
+      "loading": "正在加载可用数据集…",
+      "loadFailed": "兼容性数据加载失败。",
+      "unavailableTitle": "该模型暂不支持微调",
+      "noDatasetTitle": "没有可用的数据集",
+      "noDatasetText": "目录里没有与该模型任务匹配的数据集。",
+      "reasons": {
+        "NO_RECIPE": "这个模型还没有训练配方。",
+        "MODEL_NOT_FOUND": "目录里没有这个模型。",
+        "CATALOG_UNAVAILABLE": "目录当前不可用。",
+        "default": "该模型暂不支持微调。"
+      },
+      "tasks": {
+        "text-qa": "文本问答",
+        "text-classification": "文本分类",
+        "sequence": "序列",
+        "structure": "结构",
+        "molecule": "分子",
+        "scrna": "单细胞",
+        "vqa": "图文"
+      },
+      "planOutput": "产物路径",
+      "planDeadline": "超时",
+      "dryRunNote": "模拟模式：没有创建训练任务，以下是将会创建的内容。"
     }
   },
   "home": {
@@ -918,5 +965,14 @@
       },
       "source": "模型与数据集目录"
     }
+  },
+  "favorites": {
+    "add": "收藏到工作室",
+    "remove": "取消收藏",
+    "star": "收藏",
+    "starred": "已收藏",
+    "added": "已将 {{name}} 收藏到工作室。",
+    "removed": "已取消收藏 {{name}}。",
+    "failed": "收藏操作失败。"
   }
 }

@@ -55,6 +55,9 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("kubernetes API: %s: %s", e.Reason, e.detail)
 }
 
+// Detail returns the sanitized API-server message, for operator-facing errors.
+func (e *StatusError) Detail() string { return e.detail }
+
 // Source is the read-only view of the CubeStack CRDs used by the catalogs.
 type Source interface {
 	ListModelVersions(ctx context.Context) ([]ModelVersion, error)
@@ -223,6 +226,10 @@ func classifyStatus(status int) *StatusError {
 		return &StatusError{Status: status, Reason: "FORBIDDEN", Retryable: true}
 	case http.StatusUnauthorized:
 		return &StatusError{Status: status, Reason: "UNAUTHORIZED", Retryable: true}
+	case http.StatusConflict:
+		return &StatusError{Status: status, Reason: "ALREADY_EXISTS", Retryable: false}
+	case http.StatusUnprocessableEntity:
+		return &StatusError{Status: status, Reason: "INVALID", Retryable: false}
 	default:
 		return &StatusError{Status: status, Reason: "API_ERROR", Retryable: status >= 500}
 	}
