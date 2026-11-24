@@ -71,7 +71,6 @@ data:
   STUDIO_RECONCILE_INTERVAL_SECONDS: {{ .Values.studio.reconcileIntervalSeconds | quote }}
   STUDIO_REQUEST_TIMEOUT_SECONDS: {{ .Values.studio.requestTimeoutSeconds | quote }}
   STUDIO_FINETUNE_IMAGE: {{ .Values.studio.finetuneImage | quote }}
-  STUDIO_FINETUNE_OUTPUT_PATH: {{ .Values.studio.finetuneOutputPath | quote }}
   STUDIO_FINETUNE_DEADLINE_SECONDS: {{ .Values.studio.finetuneDeadlineSeconds | quote }}
   STUDIO_FINETUNE_MAX_SAMPLES: {{ .Values.studio.finetuneMaxSamples | quote }}
   STUDIO_AI_GATEWAY_ROUTER: {{ .Values.studio.gatewayRouter | quote }}

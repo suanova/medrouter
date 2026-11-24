@@ -144,7 +144,6 @@ func studioConfig(dryRun bool) *config.Config {
 		StudioDatasetPVCPattern:  "%s-data",
 		StudioMaxWorkspaces:      3,
 		StudioFinetuneImage:      "harbor.example/medrouter-lora@sha256:abc",
-		StudioFinetuneOutput:     "/mnt/cephfs/medrouter/lora",
 		StudioFinetuneDeadline:   12 * time.Hour,
 		StudioFinetuneMaxSamples: 20000,
 		StudioGatewayRouter:      "cubestack-ai-gateway-private",
