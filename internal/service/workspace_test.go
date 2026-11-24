@@ -371,7 +371,8 @@ func TestWorkspaceFineTuneCreatesJob(t *testing.T) {
 	container := template["containers"].([]any)[0].(map[string]any)
 	args := container["args"].([]string)
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--dataset-dir /data/medmcqa") || !strings.Contains(joined, "--output-dir /out") ||
+	if !strings.Contains(joined, "--dataset-dir /data/medmcqa") ||
+		!strings.Contains(joined, "--output-dir /out/"+workspace.Name) ||
 		!strings.Contains(joined, "--max-samples 20000") {
 		t.Fatalf("args = %v", args)
 	}

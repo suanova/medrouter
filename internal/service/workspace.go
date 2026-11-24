@@ -661,7 +661,7 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 		// runs as uid 1000; the job writes to /out, so it has to be root.
 		"securityContext": map[string]any{"runAsUser": 0, "runAsGroup": 0},
 		"command":         []string{"python3", "/opt/medrouter/train_lora.py"},
-		"args":            s.finetuneArgs(dataset),
+		"args":            s.finetuneArgs(name, dataset),
 		"env":             env,
 		"resources": map[string]any{
 			// The GPU node has ~30Gi allocatable; a 14GB bf16 model loads with
@@ -697,11 +697,13 @@ func (s *WorkspaceService) finetunePlan(name, model, dataset, basePath string) (
 
 // finetuneArgs builds the training command. The row cap is passed explicitly so
 // the deadline stays reachable on a single accelerator.
-func (s *WorkspaceService) finetuneArgs(dataset string) []string {
+func (s *WorkspaceService) finetuneArgs(name, dataset string) []string {
 	args := []string{
 		"--base-model", "/models/base",
 		"--dataset-dir", "/data/" + dataset,
-		"--output-dir", "/out",
+		// One directory per workspace: sharing /out would make two runs
+		// overwrite each other's adapter.
+		"--output-dir", "/out/" + name,
 	}
 	if s.cfg.StudioFinetuneMaxSamples > 0 {
 		args = append(args, "--max-samples", strconv.Itoa(s.cfg.StudioFinetuneMaxSamples))
