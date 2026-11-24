@@ -139,6 +139,43 @@ datasetFiles:
     largeThresholdBytes: 2147483648
     largeTTLSeconds: 3600
 
+# ---------------------------------------------------------------------------
+# Studio
+#
+# One-click workbenches launched from a user's starred models and datasets.
+# The backend matches the runtime, size and dataset volume on its own; the
+# user only picks which entry to start.
+#
+# Start with dryRun: true. It computes and shows the matched resources without
+# creating a DevEnvironment, so the sizing rules can be reviewed before the
+# chart grants write access. Then set rbac.create and flip dryRun to false.
+# ---------------------------------------------------------------------------
+studio:
+  enabled: false
+  dryRun: true
+  # Dedicated namespace for workspaces. It must exist already; pair it with a
+  # ResourceQuota so one user cannot exhaust the cluster.
+  namespace: medrouter-workspace
+  notebookImage: harbor.isuanova.com/suanova/jupyter-minimal:latest
+  # PVC naming convention produced by the dataset caching layer.
+  datasetPVCPattern: "%s-data"
+  # Per-user soft limit on active workspaces.
+  maxWorkspaces: 3
+  reconcileIntervalSeconds: 3
+  requestTimeoutSeconds: 10
+  # Fine-tuning: a batch Job from a fixed recipe. Pin the image by digest so a
+  # run always uses the stack it was validated against.
+  finetuneImage: harbor.isuanova.com/clyang/medrouter-lora@sha256:6e2dd66d02195665d495aa6103a2e27a2b59ceb66ee419410275563c331f1c16
+  # Where adapters are written on the node (hostPath, created if missing).
+  finetuneOutputPath: /data/medrouter/lora
+  finetuneDeadlineSeconds: 43200
+  # One MXC550 runs ~2 samples/s; 20k rows x 2 epochs is about 5.5h.
+  finetuneMaxSamples: 20000
+  # Role + RoleBinding that allow managing DevEnvironments in `namespace`.
+  # Only rendered when enabled and not dry-run.
+  rbac:
+    create: true
+
 # Keep at 1 with SQLite: a SQLite file cannot be shared between pods. The
 # chart rejects replicaCount > 1 in SQLite mode. PostgreSQL modes can scale.
 replicaCount: 1

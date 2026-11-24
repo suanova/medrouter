@@ -1,71 +1,129 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
-import { useMemo } from 'react'
-import type { ReactNode } from 'react'
+import {
+  BookOpen,
+  ExternalLink,
+  Loader2,
+  Play,
+  Server,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { SiteHeader } from '@/components/site-header'
 import { datasetListQueryOptions } from '@/features/datasets/queries'
+import { favoritesQueryOptions } from '@/features/favorites/star-button'
 import { PageHead } from '@/features/models/components/page-head'
 import { formatRelativeTime } from '@/features/models/format'
 import { modelListQueryOptions } from '@/features/models/queries'
+import { apiErrorMessage } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 
-import { pickRecent } from './recent'
+import { FineTuneDialog } from './finetune-dialog'
+import {
+  createWorkspace,
+  deleteWorkspace,
+  fetchWorkspaces,
+  setWorkspaceRunning,
+  WORKSPACES_QUERY_KEY,
+  type Workspace,
+} from './workspaces-api'
 
-type CatalogState = 'pending' | 'connected' | 'unavailable'
+type FavoriteKind = 'model' | 'dataset'
 
-interface CatalogLike {
-  isPending: boolean
-  isError: boolean
-  data?: { available: boolean; reason?: string; total?: number }
-}
-
-function catalogState(query: CatalogLike): CatalogState {
-  if (query.isPending) return 'pending'
-  if (query.isError || !query.data?.available) return 'unavailable'
-  return 'connected'
+interface Favorite {
+  kind: FavoriteKind
+  name: string
+  /** Joined from the catalog; empty when the entry is no longer listed. */
+  meta?: string
 }
 
 export function StudioPage() {
   const { t, i18n } = useTranslation()
   const locale = i18n.language.startsWith('zh') ? 'zh' : 'en'
+  const user = useAuthStore((state) => state.user)
+  const queryClient = useQueryClient()
+  const [plan, setPlan] = useState<Workspace | null>(null)
+  const [finetuneModel, setFinetuneModel] = useState<string | null>(null)
 
+  const favoritesQuery = useQuery({ ...favoritesQueryOptions, enabled: Boolean(user) })
+  const workspacesQuery = useQuery({
+    queryKey: WORKSPACES_QUERY_KEY,
+    queryFn: fetchWorkspaces,
+    enabled: Boolean(user),
+    // Creating is asynchronous on the platform side; poll while signed in so a
+    // workspace turns "running" without a manual refresh.
+    refetchInterval: 5_000,
+  })
   const models = useQuery(modelListQueryOptions)
   const datasets = useQuery(datasetListQueryOptions)
 
-  const modelState = catalogState(models)
-  const datasetState = catalogState(datasets)
+  // Favorites carry only kind+name; the card subtitle is joined from the
+  // catalogs already loaded on this page.
+  const favorites: Favorite[] = (favoritesQuery.data ?? []).map((favorite) => ({
+    kind: favorite.kind,
+    name: favorite.name,
+    meta:
+      favorite.kind === 'model'
+        ? (models.data?.models.find((m) => m.model === favorite.name)?.latest_version ?? '')
+        : (datasets.data?.datasets.find((d) => d.dataset === favorite.name)?.format ?? ''),
+  }))
 
-  const recentModels = useMemo(
-    () =>
-      models.data?.available
-        ? pickRecent(models.data.models, (model) => model.updated_at)
-        : [],
-    [models.data]
-  )
-  const recentDatasets = useMemo(
-    () =>
-      datasets.data?.available
-        ? pickRecent(datasets.data.datasets, (dataset) => dataset.updated_at)
-        : [],
-    [datasets.data]
-  )
-
+  const workspaces = workspacesQuery.data ?? []
+  const running = workspaces.filter((workspace) => workspace.phase === 'running').length
   const notes = [
-    ...(models.data?.available
-      ? [t('studio.headNotes.models', { count: models.data.total })]
-      : []),
-    ...(datasets.data?.available
-      ? [t('studio.headNotes.datasets', { count: datasets.data.total })]
-      : []),
-    t('studio.headNotes.runtime'),
+    t('studio.headNotes.running', { count: running }),
+    t('studio.headNotes.favorites', { count: favorites.length }),
   ]
 
-  const startMeta = (state: CatalogState, total: number | undefined, key: string) =>
-    state === 'connected'
-      ? t(key, { count: total ?? 0 })
-      : t('studio.start.unavailable')
+  const workspaceFor = (favorite: Favorite) =>
+    workspaces.find(
+      (workspace) =>
+        workspace.source_kind === favorite.kind && workspace.source_name === favorite.name
+    )
+
+  const launchMutation = useMutation({
+    mutationFn: (favorite: Favorite) => createWorkspace(favorite.kind, favorite.name),
+    onSuccess: (workspace) => {
+      if (workspace.dry_run) {
+        setPlan(workspace)
+        return
+      }
+      void queryClient.invalidateQueries({ queryKey: WORKSPACES_QUERY_KEY })
+      toast.success(t('studio.workspace.created', { name: workspace.name }))
+    },
+    onError: (error) => toast.error(apiErrorMessage(error) ?? t('studio.workspace.actionFailed')),
+  })
+
+  const runningMutation = useMutation({
+    mutationFn: ({ id, running: next }: { id: number; running: boolean }) =>
+      setWorkspaceRunning(id, next),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: WORKSPACES_QUERY_KEY })
+    },
+    onError: (error) => toast.error(apiErrorMessage(error) ?? t('studio.workspace.actionFailed')),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (workspace: Workspace) => deleteWorkspace(workspace.id),
+    onSuccess: (_result, workspace) => {
+      void queryClient.invalidateQueries({ queryKey: WORKSPACES_QUERY_KEY })
+      toast.success(t('studio.workspace.deleted', { name: workspace.name }))
+    },
+    onError: (error) => toast.error(apiErrorMessage(error) ?? t('studio.workspace.actionFailed')),
+  })
+
+  const openWorkspace = (workspace: Workspace) => {
+    if (!workspace.endpoint) {
+      toast.info(t('studio.workspace.noEndpoint'))
+      return
+    }
+    window.open(workspace.endpoint, '_blank', 'noopener')
+  }
 
   return (
     <div className='ml-scope'>
@@ -79,7 +137,7 @@ export function StudioPage() {
             notes={notes}
             actions={
               <>
-                <Link to='/models' className='ml-btn ml-btn-primary'>
+                <Link to='/models' className='ml-btn ml-btn-secondary'>
                   {t('studio.actions.models')}
                 </Link>
                 <Link to='/datasets' className='ml-btn ml-btn-secondary'>
@@ -89,203 +147,117 @@ export function StudioPage() {
             }
           />
 
-          <section className='st-console' aria-labelledby='st-console-title'>
-            <div className='st-console-head'>
-              <div>
-                <p className='st-console-kicker'>{t('studio.console.kicker')}</p>
-                <h2 className='st-console-title' id='st-console-title'>
-                  {t('studio.console.title')}
-                </h2>
-              </div>
-              <span className='st-pill'>
-                <i className='st-dot' aria-hidden='true' />
-                {t('studio.console.status')}
-              </span>
+          <section className='st-favorites' aria-labelledby='st-favorites-title'>
+            <div className='st-section-head is-bordered'>
+              <h2 id='st-favorites-title'>{t('studio.favorites.title')}</h2>
+              <span className='st-count'>{t('studio.favorites.note')}</span>
             </div>
-            <p className='st-console-text'>{t('studio.console.text')}</p>
-            <dl className='st-console-grid'>
-              <div className='st-console-stat'>
-                <dt>{t('studio.console.fields.inference')}</dt>
-                <dd>InferenceService</dd>
+
+            {!user ? (
+              <div className='st-empty'>
+                <strong>{t('studio.favorites.signInTitle')}</strong>
+                <span>{t('studio.favorites.signInText')}</span>
+                <Link to='/sign-in' className='ml-btn ml-btn-primary'>
+                  {t('studio.favorites.signIn')}
+                </Link>
               </div>
-              <div className='st-console-stat'>
-                <dt>{t('studio.console.fields.workspace')}</dt>
-                <dd>DevEnvironment</dd>
+            ) : favoritesQuery.isPending ? (
+              <div className='st-work-grid' aria-busy='true'>
+                {[0, 1, 2].map((row) => (
+                  <div key={row} className='st-fav is-skeleton' aria-hidden='true'>
+                    <span className='st-skel-line' />
+                    <span className='st-skel-line is-short' />
+                  </div>
+                ))}
               </div>
-              <div className='st-console-stat'>
-                <dt>{t('studio.console.fields.quota')}</dt>
-                <dd>{t('studio.console.values.planned')}</dd>
+            ) : favoritesQuery.isError ? (
+              <div className='st-empty'>
+                <strong>{t('studio.favorites.errorTitle')}</strong>
+                <span>{t('studio.favorites.errorText')}</span>
+                <button
+                  type='button'
+                  className='ml-btn ml-btn-secondary'
+                  onClick={() => void favoritesQuery.refetch()}
+                >
+                  {t('studio.favorites.retry')}
+                </button>
               </div>
-              <div className='st-console-stat'>
-                <dt>{t('studio.console.fields.logs')}</dt>
-                <dd>{t('studio.console.values.planned')}</dd>
+            ) : favorites.length === 0 ? (
+              <div className='st-empty'>
+                <strong>{t('studio.favorites.emptyTitle')}</strong>
+                <span>{t('studio.favorites.emptyText')}</span>
+                <Link to='/models' className='ml-btn ml-btn-primary'>
+                  {t('studio.favorites.browse')}
+                </Link>
               </div>
-            </dl>
+            ) : (
+              <div className='st-work-grid'>
+                {favorites.map((favorite) => (
+                  <FavoriteCard
+                    key={`${favorite.kind}:${favorite.name}`}
+                    favorite={favorite}
+                    workspace={workspaceFor(favorite)}
+                    pending={launchMutation.isPending}
+                    onLaunch={() => launchMutation.mutate(favorite)}
+                    onOpen={openWorkspace}
+                    onFinetune={() => setFinetuneModel(favorite.name)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
-          <div className='st-grid'>
-            <div className='st-col'>
-              <RecentPanel
-                title={t('studio.recent.models')}
-                state={modelState}
-                count={
-                  models.data?.available
-                    ? t('studio.recent.count', { count: models.data.total })
-                    : undefined
-                }
-                reason={models.data?.reason}
-              >
-                {recentModels.map((model) => (
-                  <Link
-                    key={model.model}
-                    to='/models/$name'
-                    params={{ name: model.model }}
-                    className='st-recent-row'
-                  >
-                    <span className='st-recent-main'>
-                      <span className='st-recent-name'>
-                        {model.display_name || model.model}
-                      </span>
-                      <span className='st-recent-meta'>
-                        {[model.latest_version, model.publisher]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </span>
-                    <span className='st-recent-time'>
-                      {formatRelativeTime(model.updated_at, locale)}
-                    </span>
-                    <ArrowRight className='st-recent-arrow' aria-hidden='true' />
-                  </Link>
-                ))}
-              </RecentPanel>
-
-              <RecentPanel
-                title={t('studio.recent.datasets')}
-                state={datasetState}
-                count={
-                  datasets.data?.available
-                    ? t('studio.recent.count', { count: datasets.data.total })
-                    : undefined
-                }
-                reason={datasets.data?.reason}
-              >
-                {recentDatasets.map((dataset) => (
-                  <Link
-                    key={dataset.dataset}
-                    to='/datasets/$name'
-                    params={{ name: dataset.dataset }}
-                    className='st-recent-row'
-                  >
-                    <span className='st-recent-main'>
-                      <span className='st-recent-name'>
-                        {dataset.display_name || dataset.dataset}
-                      </span>
-                      <span className='st-recent-meta'>
-                        {[dataset.format, dataset.publisher]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </span>
-                    <span className='st-recent-time'>
-                      {formatRelativeTime(dataset.updated_at, locale)}
-                    </span>
-                    <ArrowRight className='st-recent-arrow' aria-hidden='true' />
-                  </Link>
-                ))}
-              </RecentPanel>
-            </div>
-
-            <aside className='st-status-card' aria-labelledby='st-status-title'>
-              <p className='st-side-kicker'>{t('studio.status.kicker')}</p>
-              <h2 id='st-status-title'>{t('studio.status.title')}</h2>
-              <ul className='st-status-list'>
-                <StatusRow
-                  label={t('studio.status.models')}
-                  state={modelState}
-                />
-                <StatusRow
-                  label={t('studio.status.datasets')}
-                  state={datasetState}
-                />
-                <StatusRow
-                  label={t('studio.status.runtime')}
-                  state='notConnected'
-                />
-              </ul>
-              <p className='st-side-note'>{t('studio.status.note')}</p>
-            </aside>
-          </div>
-
-          <section className='st-start' aria-labelledby='st-start-title'>
+          <section className='st-workspaces' aria-labelledby='st-workspaces-title'>
             <div className='st-section-head is-bordered'>
-              <h2 id='st-start-title'>{t('studio.start.title')}</h2>
-              <span className='st-count'>{t('studio.start.note')}</span>
+              <h2 id='st-workspaces-title'>{t('studio.workspace.title')}</h2>
+              <span className='st-count'>{t('studio.workspace.note')}</span>
             </div>
 
-            <Link to='/models' className='st-start-row'>
-              <span className='st-start-idx'>01</span>
-              <span className='st-start-main'>
-                <span className='st-start-title'>
-                  {t('studio.start.models.title')}
-                </span>
-                <span className='st-start-text'>
-                  {t('studio.start.models.text')}
-                </span>
-              </span>
-              <span className='st-start-meta'>
-                {startMeta(modelState, models.data?.total, 'studio.start.models.meta')}
-              </span>
-              <span className='st-start-cta'>
-                {t('studio.start.models.cta')}
-                <ArrowRight aria-hidden='true' />
-              </span>
-            </Link>
-
-            <Link to='/datasets' className='st-start-row'>
-              <span className='st-start-idx'>02</span>
-              <span className='st-start-main'>
-                <span className='st-start-title'>
-                  {t('studio.start.datasets.title')}
-                </span>
-                <span className='st-start-text'>
-                  {t('studio.start.datasets.text')}
-                </span>
-              </span>
-              <span className='st-start-meta'>
-                {startMeta(
-                  datasetState,
-                  datasets.data?.total,
-                  'studio.start.datasets.meta'
-                )}
-              </span>
-              <span className='st-start-cta'>
-                {t('studio.start.datasets.cta')}
-                <ArrowRight aria-hidden='true' />
-              </span>
-            </Link>
-
-            <Link to='/dashboard' className='st-start-row'>
-              <span className='st-start-idx'>03</span>
-              <span className='st-start-main'>
-                <span className='st-start-title'>
-                  {t('studio.start.dashboard.title')}
-                </span>
-                <span className='st-start-text'>
-                  {t('studio.start.dashboard.text')}
-                </span>
-              </span>
-              <span className='st-start-meta'>
-                {t('studio.start.dashboard.meta')}
-              </span>
-              <span className='st-start-cta'>
-                {t('studio.start.dashboard.cta')}
-                <ArrowRight aria-hidden='true' />
-              </span>
-            </Link>
+            {!user || workspacesQuery.isPending ? null : workspacesQuery.isError ? (
+              <div className='st-empty'>
+                <strong>{t('studio.workspace.errorTitle')}</strong>
+                <span>{t('studio.workspace.errorText')}</span>
+                <button
+                  type='button'
+                  className='ml-btn ml-btn-secondary'
+                  onClick={() => void workspacesQuery.refetch()}
+                >
+                  {t('studio.favorites.retry')}
+                </button>
+              </div>
+            ) : workspaces.length === 0 ? (
+              <div className='st-empty'>
+                <strong>{t('studio.workspace.emptyTitle')}</strong>
+                <span>{t('studio.workspace.emptyText')}</span>
+              </div>
+            ) : (
+              <div className='st-work-grid'>
+                {workspaces.map((workspace) => (
+                  <WorkspaceCard
+                    key={workspace.id}
+                    workspace={workspace}
+                    locale={locale}
+                    pending={runningMutation.isPending || deleteMutation.isPending}
+                    onToggle={() =>
+                      runningMutation.mutate({
+                        id: workspace.id,
+                        running: workspace.phase !== 'running',
+                      })
+                    }
+                    onDelete={() => deleteMutation.mutate(workspace)}
+                    onOpen={() => openWorkspace(workspace)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </main>
+
+      {plan ? <PlanDialog plan={plan} onClose={() => setPlan(null)} /> : null}
+      {finetuneModel ? (
+        <FineTuneDialog model={finetuneModel} onClose={() => setFinetuneModel(null)} />
+      ) : null}
 
       <footer className='ml-foot'>
         <div className='ml-container ml-foot-inner'>
@@ -297,93 +269,247 @@ export function StudioPage() {
   )
 }
 
-function RecentPanel({
-  title,
-  count,
-  state,
-  reason,
-  children,
+/**
+ * A favorite is the unit of intent: the user already chose this model or
+ * dataset, so the only remaining decision is "start it". Everything else —
+ * runtime, size, cards, the dataset volume — is matched by the backend.
+ */
+function FavoriteCard({
+  favorite,
+  workspace,
+  pending,
+  onLaunch,
+  onOpen,
+  onFinetune,
 }: {
-  title: string
-  count?: string
-  state: CatalogState
-  reason?: string
-  children: ReactNode
+  favorite: Favorite
+  workspace?: Workspace
+  pending: boolean
+  onLaunch: () => void
+  onOpen: (workspace: Workspace) => void
+  onFinetune: () => void
 }) {
   const { t } = useTranslation()
-  const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children)
-
-  let body: ReactNode
-  if (state === 'pending') {
-    body = <RecentSkeleton />
-  } else if (state === 'unavailable') {
-    body = (
-      <div className='st-recent-list'>
-        <p className='st-inline-note'>
-          {t('studio.recent.unavailable', { reason: reason || 'API_ERROR' })}
-        </p>
-      </div>
-    )
-  } else if (hasRows) {
-    body = <div className='st-recent-list'>{children}</div>
-  } else {
-    body = (
-      <div className='st-recent-list'>
-        <p className='st-inline-note'>{t('studio.recent.empty')}</p>
-      </div>
-    )
-  }
+  const isModel = favorite.kind === 'model'
+  const Icon = isModel ? Server : BookOpen
+  const creating = workspace?.phase === 'creating'
+  const running = workspace?.phase === 'running'
 
   return (
-    <section className='st-panel' aria-busy={state === 'pending'}>
-      <div className='st-section-head'>
-        <h3>{title}</h3>
-        {count ? <span className='st-count'>{count}</span> : null}
-      </div>
-      {body}
-    </section>
-  )
-}
-
-function RecentSkeleton() {
-  return (
-    <div className='st-recent-list' aria-hidden='true'>
-      {[0, 1, 2].map((row) => (
-        <div key={row} className='st-recent-row is-skeleton'>
-          <span className='st-recent-main'>
-            <span className='st-skel-line' />
-            <span className='st-skel-line is-short' />
+    <article className='st-fav'>
+      <header className='st-fav-head'>
+        <span className='st-fav-kind'>
+          <Icon aria-hidden='true' />
+          {t(`studio.favorites.kinds.${favorite.kind}`)}
+        </span>
+        {workspace ? (
+          <span className={`st-work-phase is-${workspace.phase}`}>
+            <i aria-hidden='true' />
+            {t(`studio.workspace.phases.${workspace.phase}`)}
           </span>
-        </div>
-      ))}
-    </div>
+        ) : null}
+      </header>
+
+      <h3 className='st-fav-name'>{favorite.name}</h3>
+      {favorite.meta ? <p className='st-fav-meta'>{favorite.meta}</p> : null}
+
+      <p className='st-fav-auto'>
+        {workspace?.matched.cpu
+          ? [workspace.matched.cpu + 'C', workspace.matched.memory].filter(Boolean).join(' · ')
+          : isModel
+            ? t('studio.favorites.autoMatchInference')
+            : t('studio.favorites.autoMatchNotebook')}
+      </p>
+
+      <footer className='st-fav-foot'>
+        {isModel ? (
+          <button type='button' className='ml-btn ml-btn-secondary st-fav-btn' onClick={onFinetune}>
+            {t('studio.favorites.finetune')}
+          </button>
+        ) : null}
+        {running && workspace ? (
+          <button
+            type='button'
+            className='ml-btn ml-btn-primary st-fav-btn'
+            onClick={() => onOpen(workspace)}
+          >
+            <ExternalLink aria-hidden='true' />
+            {t('studio.workspace.open')}
+          </button>
+        ) : (
+          <button
+            type='button'
+            className='ml-btn ml-btn-primary st-fav-btn'
+            disabled={pending || creating}
+            onClick={onLaunch}
+          >
+            {pending || creating ? (
+              <Loader2 className='st-spin' aria-hidden='true' />
+            ) : (
+              <Play aria-hidden='true' />
+            )}
+            {creating
+              ? t('studio.favorites.starting')
+              : isModel
+                ? t('studio.favorites.deploy')
+                : t('studio.favorites.start')}
+          </button>
+        )}
+      </footer>
+    </article>
   )
 }
 
-const STATUS_TONES: Record<CatalogState | 'notConnected', string> = {
-  connected: 'is-on',
-  pending: 'is-idle',
-  unavailable: 'is-warn',
-  notConnected: 'is-idle',
-}
-
-function StatusRow({
-  label,
-  state,
+function WorkspaceCard({
+  workspace,
+  locale,
+  pending,
+  onToggle,
+  onDelete,
+  onOpen,
 }: {
-  label: string
-  state: CatalogState | 'notConnected'
+  workspace: Workspace
+  locale: string
+  pending: boolean
+  onToggle: () => void
+  onDelete: () => void
+  onOpen: () => void
 }) {
   const { t } = useTranslation()
-  const tone = STATUS_TONES[state]
+  const Icon = workspace.kind === 'inference' ? Server : BookOpen
+  const isJob = workspace.kind === 'finetune'
+  const active = workspace.phase === 'running'
+  const busy = workspace.phase === 'creating'
 
   return (
-    <li className='st-status-row'>
-      <span className={`st-dot ${tone}`} aria-hidden='true' />
-      <span className='st-status-label'>{label}</span>
-      <span className='st-status-value'>
-        {t(`studio.status.states.${state}`)}
-      </span>
-    </li>
+    <article className='st-work'>
+      <header className='st-work-head'>
+        <span className='st-work-kind'>
+          <Icon aria-hidden='true' />
+          {t(`studio.workspace.kinds.${workspace.kind}`)}
+        </span>
+        <span className={`st-work-phase is-${workspace.phase}`}>
+          <i aria-hidden='true' />
+          {t(`studio.workspace.phases.${workspace.phase}`)}
+        </span>
+      </header>
+
+      <h3 className='st-work-name'>{workspace.name}</h3>
+      <p className='st-work-meta'>
+        {[workspace.source_name, workspace.matched.cpu ? workspace.matched.cpu + 'C' : '', workspace.matched.memory]
+          .filter(Boolean)
+          .join(' · ')}
+      </p>
+      {workspace.endpoint ? (
+        <p className='st-work-endpoint' title={workspace.endpoint}>
+          {workspace.endpoint}
+        </p>
+      ) : null}
+      {workspace.reason ? <p className='st-work-reason'>{workspace.reason}</p> : null}
+
+      <footer className='st-work-foot'>
+        <span className='st-work-time'>
+          {workspace.created_at ? formatRelativeTime(workspace.created_at, locale) : ''}
+        </span>
+        <span className='st-work-actions'>
+          {workspace.kind === 'notebook' && active ? (
+            <button type='button' className='ml-btn ml-btn-secondary st-work-btn' onClick={onOpen}>
+              <ExternalLink aria-hidden='true' />
+              {t('studio.workspace.open')}
+            </button>
+          ) : null}
+          {isJob ? null : (
+            <button
+              type='button'
+              className='ml-btn ml-btn-secondary st-work-btn'
+              disabled={busy || pending}
+              onClick={onToggle}
+            >
+              {busy ? (
+                <Loader2 className='st-spin' aria-hidden='true' />
+              ) : active ? (
+                <Square aria-hidden='true' />
+              ) : (
+                <Play aria-hidden='true' />
+              )}
+              {active ? t('studio.workspace.stop') : t('studio.workspace.start')}
+            </button>
+          )}
+          <button
+            type='button'
+            className='ml-btn ml-btn-secondary st-work-btn is-danger'
+            disabled={pending}
+            onClick={onDelete}
+            aria-label={t('studio.workspace.delete')}
+          >
+            <Trash2 aria-hidden='true' />
+          </button>
+        </span>
+      </footer>
+    </article>
+  )
+}
+
+/**
+ * Dry-run plan: the exact resources the backend would create. This is how the
+ * matching rules can be reviewed before write access is granted.
+ */
+function PlanDialog({ plan, onClose }: { plan: Workspace; onClose: () => void }) {
+  const { t } = useTranslation()
+  const rows: Array<[string, string]> = [
+    [t('studio.plan.name'), plan.name],
+    [t('studio.plan.namespace'), plan.namespace],
+    [t('studio.plan.image'), plan.matched.image ?? '—'],
+    [
+      t('studio.plan.resources'),
+      [plan.matched.cpu ? plan.matched.cpu + 'C' : '', plan.matched.memory]
+        .filter(Boolean)
+        .join(' · ') || '—',
+    ],
+    [t('studio.plan.storage'), plan.matched.storage ?? '—'],
+    [t('studio.plan.volume'), plan.matched.volume ?? '—'],
+    [t('studio.plan.dataset'), plan.matched.dataset_size ?? '—'],
+    [
+      t('studio.plan.idle'),
+      plan.matched.idle_timeout_seconds
+        ? String(Math.round(plan.matched.idle_timeout_seconds / 3600)) + 'h'
+        : '—',
+    ],
+  ]
+
+  return (
+    <div
+      className='st-dialog-backdrop'
+      role='presentation'
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <div className='st-dialog' role='dialog' aria-modal='true' aria-label={t('studio.plan.title')}>
+        <header className='st-dialog-head'>
+          <div>
+            <p className='st-dialog-kicker'>{t('studio.plan.kicker')}</p>
+            <h2>{t('studio.plan.title')}</h2>
+          </div>
+          <button type='button' className='st-icon-btn' onClick={onClose} aria-label={t('studio.plan.close')}>
+            <X aria-hidden='true' />
+          </button>
+        </header>
+        <dl className='st-plan-grid'>
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className='st-plan-note'>{t('studio.plan.note')}</p>
+        <footer className='st-dialog-foot'>
+          <button type='button' className='ml-btn ml-btn-primary' onClick={onClose}>
+            {t('studio.plan.close')}
+          </button>
+        </footer>
+      </div>
+    </div>
   )
 }

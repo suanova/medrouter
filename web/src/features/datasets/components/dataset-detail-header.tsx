@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Check, Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { StarButton } from '@/features/favorites/star-button'
 import { formatRelativeTime, initials } from '@/features/models/format'
 
 import { datasetDescription } from '../labels'
@@ -67,6 +68,7 @@ export function DatasetDetailHeader({
             <ArrowLeft aria-hidden='true' />
             {t('datasets.detail.back')}
           </Link>
+          <StarButton kind='dataset' name={detail.dataset} />
           <button type='button' className='ml-btn ml-btn-primary' onClick={onCopy}>
             {copied ? <Check aria-hidden='true' /> : <Copy aria-hidden='true' />}
             {copied ? t('datasets.detail.copied') : t('datasets.detail.copy')}

@@ -1,0 +1,78 @@
+import { api, type ApiEnvelope } from '@/lib/api'
+
+export interface MatchedResources {
+  image?: string
+  cpu?: string
+  memory?: string
+  gpu: number
+  storage?: string
+  volume?: string
+  dataset_size?: string
+  idle_timeout_seconds?: number
+  base_model?: string
+  dataset?: string
+  output?: string
+  deadline_seconds?: number
+}
+
+export type WorkspacePhase =
+  | 'planned'
+  | 'creating'
+  | 'running'
+  | 'stopped'
+  | 'succeeded'
+  | 'failed'
+
+export interface Workspace {
+  id: number
+  kind: 'notebook' | 'inference' | 'finetune'
+  source_kind: 'model' | 'dataset'
+  source_name: string
+  name: string
+  namespace: string
+  phase: WorkspacePhase
+  reason?: string
+  endpoint?: string
+  matched: MatchedResources
+  /** Set by the server when STUDIO_DRY_RUN is on: nothing was created. */
+  dry_run?: boolean
+  created_at?: string
+}
+
+function unwrap<T>(envelope: ApiEnvelope<T>): T {
+  if (!envelope.success || envelope.data === undefined) {
+    throw new Error(envelope.message || 'Request failed')
+  }
+  return envelope.data
+}
+
+export async function fetchWorkspaces(): Promise<Workspace[]> {
+  const response = await api.get<ApiEnvelope<{ workspaces: Workspace[] }>>('/studio/workspaces')
+  return unwrap(response.data).workspaces ?? []
+}
+
+export const WORKSPACES_QUERY_KEY = ['studio', 'workspaces'] as const
+
+export async function createWorkspace(
+  sourceKind: 'model' | 'dataset',
+  sourceName: string,
+  datasetName?: string
+): Promise<Workspace> {
+  const response = await api.post<ApiEnvelope<Workspace>>('/studio/workspaces', {
+    source_kind: sourceKind,
+    source_name: sourceName,
+    ...(datasetName ? { dataset_name: datasetName } : {}),
+  })
+  return unwrap(response.data)
+}
+
+export async function setWorkspaceRunning(id: number, running: boolean): Promise<Workspace> {
+  const response = await api.post<ApiEnvelope<Workspace>>(
+    `/studio/workspaces/${id}/${running ? 'start' : 'stop'}`
+  )
+  return unwrap(response.data)
+}
+
+export async function deleteWorkspace(id: number): Promise<void> {
+  await api.delete(`/studio/workspaces/${id}`)
+}

@@ -117,6 +117,14 @@ func newTestApp(t *testing.T, mutate func(*config.Config)) *testApp {
 			service.NewDatasetCatalog(cfg, kube.DisabledSource),
 			nil,
 		),
+		Studio: controller.NewStudioController(
+			service.NewFavoriteService(),
+			service.NewWorkspaceService(cfg, nil, nil),
+			service.NewFineTuneService(
+				service.NewModelCatalog(cfg, kube.DisabledSource),
+				service.NewDatasetCatalog(cfg, kube.DisabledSource),
+			),
+		),
 		Sessions: sessions,
 	})
 	server := httptest.NewServer(engine)
@@ -673,4 +681,34 @@ func TestBasePathAPIAndOAuthRedirect(t *testing.T) {
 	if location := resp.Header.Get("Location"); !strings.HasPrefix(location, "/medrouter/sign-in?oauth_error=") {
 		t.Fatalf("base path redirect = %q", location)
 	}
+}
+
+func TestStudioFavoritesRequireAuth(t *testing.T) {
+	app := newTestApp(t, nil)
+
+	resp, env := app.request(http.MethodGet, "/api/studio/favorites", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "list favorites without a session")
+
+	resp, env = app.request(http.MethodPost, "/api/studio/favorites", map[string]any{"kind": "model", "name": "esm2"})
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "add favorite without a session")
+
+	resp, env = app.request(http.MethodDelete, "/api/studio/favorites/model/esm2", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "remove favorite without a session")
+}
+
+func TestStudioWorkspacesRequireAuth(t *testing.T) {
+	app := newTestApp(t, nil)
+
+	resp, env := app.request(http.MethodGet, "/api/studio/workspaces", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "list workspaces without a session")
+
+	resp, env = app.request(http.MethodPost, "/api/studio/workspaces",
+		map[string]any{"source_kind": "dataset", "source_name": "pubmedqa"})
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "create workspace without a session")
+
+	resp, env = app.request(http.MethodPost, "/api/studio/workspaces/1/start", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "start workspace without a session")
+
+	resp, env = app.request(http.MethodDelete, "/api/studio/workspaces/1", nil)
+	app.mustCode(resp, env, http.StatusUnauthorized, "UNAUTHENTICATED", "delete workspace without a session")
 }

@@ -63,6 +63,23 @@ func main() {
 	statusController := controller.NewStatusController(cfg, oauth)
 	modelController := controller.NewModelController(catalog, modelFiles)
 	datasetController := controller.NewDatasetController(datasetCatalog, datasetFiles)
+	// A typed nil must not be stored in the interface: the service uses a nil
+	// cluster to mean "dry-run or unavailable".
+	var workspaceCluster service.WorkspaceCluster
+	if client := newWorkspaceCluster(cfg); client != nil {
+		workspaceCluster = client
+	}
+	datasetSize := func(ctx context.Context, name string) (string, bool) {
+		detail, found := datasetCatalog.Detail(ctx, name)
+		if !found || detail == nil {
+			return "", false
+		}
+		return detail.Size, true
+	}
+	finetuneService := service.NewFineTuneService(catalog, datasetCatalog)
+	workspaceService := service.NewWorkspaceService(cfg, workspaceCluster, datasetSize).
+		WithFineTune(catalog.StorageOf, finetuneService)
+	studioController := controller.NewStudioController(service.NewFavoriteService(), workspaceService, finetuneService)
 
 	engine := router.New(router.Deps{
 		Config:       cfg,
@@ -72,9 +89,19 @@ func main() {
 		Status:       statusController,
 		Models:       modelController,
 		Datasets:     datasetController,
+		Studio:       studioController,
 		Sessions:     sessions,
 		Static:       webDist,
 	})
+
+	reconcilerCtx, stopReconciler := context.WithCancel(context.Background())
+	defer stopReconciler()
+	if cfg.StudioEnabled {
+		log.Printf("studio: enabled (dry-run=%t, namespace=%s)", cfg.StudioDryRun, cfg.StudioNamespace)
+	}
+	if workspaceCluster != nil {
+		go workspaceService.RunReconciler(reconcilerCtx)
+	}
 
 	if cfg.SessionSecret == config.DefaultDevSessionSecret {
 		log.Printf("WARN using the development SESSION_SECRET; set SESSION_SECRET before deploying")
@@ -185,6 +212,29 @@ func newStreamHTTPClient(headerTimeout time.Duration) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = headerTimeout
 	return &http.Client{Transport: transport}
+}
+
+// newWorkspaceCluster builds the write-capable client the studio uses to
+// create DevEnvironments. It is nil in dry-run mode, so the service can only
+// compute plans and never touch the cluster.
+func newWorkspaceCluster(cfg *config.Config) *kube.Client {
+	if !cfg.StudioEnabled || cfg.StudioDryRun {
+		return nil
+	}
+	var (
+		client *kube.Client
+		err    error
+	)
+	if url := datasetAPIURL(cfg); url != "" {
+		client, err = kube.NewAPIClient(url, cfg.StudioTimeout)
+	} else {
+		client, err = kube.NewInClusterClient(cfg.StudioTimeout)
+	}
+	if err != nil {
+		log.Printf("WARN studio: %v", err)
+		return nil
+	}
+	return client
 }
 
 // newCatalogSource chooses the model-library data source. No configuration

@@ -1,0 +1,46 @@
+{{- if and .Values.studio.enabled (not .Values.studio.dryRun) .Values.studio.rbac.create }}
+{{- /*
+  The studio writes DevEnvironments into one dedicated namespace. This is a
+  Role, not a ClusterRole: no other namespace is reachable with it. The
+  namespace itself is expected to exist (create it with the namespace's
+  ResourceQuota), so this chart never adopts platform-owned namespaces.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "medrouter.fullname" . }}-studio
+  namespace: {{ .Values.studio.namespace }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["ai.cubestack.io"]
+    resources: ["devenvironments"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # Fine-tuning runs a batch Job in the same namespace.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # Reading pod logs is how a failed training run is diagnosed.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "medrouter.fullname" . }}-studio
+  namespace: {{ .Values.studio.namespace }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "medrouter.fullname" . }}-studio
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "medrouter.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

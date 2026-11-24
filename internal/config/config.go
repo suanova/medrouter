@@ -127,7 +127,32 @@ type Config struct {
 	S3DownloadDailyQuota     int64
 	S3DownloadLargeThreshold int64
 	S3DownloadLargeTTL       time.Duration
+
+	// Studio launches one-click workspaces from favorites. DryRun computes and
+	// returns the plan without creating a Custom Resource, which lets the
+	// resource matching be validated before write access is granted.
+	StudioEnabled           bool
+	StudioDryRun            bool
+	StudioNamespace         string
+	StudioNotebookImage     string
+	StudioDatasetPVCPattern string
+	StudioMaxWorkspaces     int
+	StudioReconcileInterval time.Duration
+	StudioTimeout           time.Duration
+
+	// Fine-tuning runs a batch Job from a fixed recipe: one accelerator, a
+	// baked image, and the adapter written under OutputPath.
+	StudioFinetuneImage    string
+	StudioFinetuneOutput   string
+	StudioFinetuneDeadline time.Duration
+	// StudioFinetuneMaxSamples caps the training rows. A single MXC550 runs
+	// about 2 samples/s, so the full 182k-row MedMCQA set would need ~50h.
+	StudioFinetuneMaxSamples int
 }
+
+// defaultFinetuneImage is pinned by digest: a fine-tune must run the exact
+// stack it was validated against, not whatever a floating tag points at now.
+const defaultFinetuneImage = "harbor.isuanova.com/clyang/medrouter-lora@sha256:6e2dd66d02195665d495aa6103a2e27a2b59ceb66ee419410275563c331f1c16"
 
 // Load reads configuration from the environment. A .env file in the working
 // directory is loaded when present (development convenience).
@@ -244,6 +269,19 @@ func Load() (*Config, error) {
 		S3DownloadDailyQuota:     bytesEnv("S3_DOWNLOAD_DAILY_QUOTA_BYTES", 100<<30),
 		S3DownloadLargeThreshold: bytesEnv("S3_DOWNLOAD_LARGE_THRESHOLD_BYTES", 2<<30),
 		S3DownloadLargeTTL:       secondsEnv("S3_DOWNLOAD_LARGE_TTL_SECONDS", 3600),
+
+		StudioEnabled:            boolEnv("STUDIO_ENABLED", false),
+		StudioDryRun:             boolEnv("STUDIO_DRY_RUN", true),
+		StudioNamespace:          getenv("STUDIO_NAMESPACE", "medrouter-workspace"),
+		StudioNotebookImage:      getenv("STUDIO_NOTEBOOK_IMAGE", "harbor.isuanova.com/suanova/jupyter-minimal:latest"),
+		StudioDatasetPVCPattern:  getenv("STUDIO_DATASET_PVC_PATTERN", "%s-data"),
+		StudioMaxWorkspaces:      intEnv("STUDIO_MAX_WORKSPACES", 3),
+		StudioReconcileInterval:  secondsEnv("STUDIO_RECONCILE_INTERVAL_SECONDS", 3),
+		StudioTimeout:            secondsEnv("STUDIO_REQUEST_TIMEOUT_SECONDS", 10),
+		StudioFinetuneImage:      getenv("STUDIO_FINETUNE_IMAGE", defaultFinetuneImage),
+		StudioFinetuneOutput:     strings.TrimRight(getenv("STUDIO_FINETUNE_OUTPUT_PATH", "/data/medrouter/lora"), "/"),
+		StudioFinetuneDeadline:   secondsEnv("STUDIO_FINETUNE_DEADLINE_SECONDS", 43200),
+		StudioFinetuneMaxSamples: intEnv("STUDIO_FINETUNE_MAX_SAMPLES", 20000),
 	}
 
 	if cfg.SessionSecret == "" {

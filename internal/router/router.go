@@ -23,6 +23,7 @@ type Deps struct {
 	Status       *controller.StatusController
 	Models       *controller.ModelController
 	Datasets     *controller.DatasetController
+	Studio       *controller.StudioController
 	Sessions     *service.SessionService
 	Static       fs.FS
 }
@@ -69,6 +70,15 @@ func New(d Deps) *gin.Engine {
 	protected.GET("/models/:name/files/content", d.Models.Content)
 	protected.GET("/datasets/:name/files/preview", d.Datasets.Preview)
 	protected.GET("/datasets/:name/files/content", d.Datasets.Content)
+	// Studio state. Favorites drive one-click launch, so they are per user.
+	protected.GET("/studio/favorites", d.Studio.ListFavorites)
+	protected.POST("/studio/favorites", d.Studio.AddFavorite)
+	protected.DELETE("/studio/favorites/:kind/:name", d.Studio.RemoveFavorite)
+	protected.GET("/studio/workspaces", d.Studio.ListWorkspaces)
+	protected.POST("/studio/workspaces", d.Studio.CreateWorkspace)
+	protected.POST("/studio/workspaces/:id/:action", d.Studio.SetWorkspaceRunning)
+	protected.DELETE("/studio/workspaces/:id", d.Studio.DeleteWorkspace)
+	protected.GET("/studio/finetune/targets", d.Studio.FineTuneTargets)
 
 	engine.GET(basePath+"/healthz", d.Status.Health)
 
