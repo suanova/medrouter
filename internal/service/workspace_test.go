@@ -67,11 +67,14 @@ func (f *fakeNotebooks) CreateJob(_ context.Context, namespace, name string, lab
 
 func (f *fakeNotebooks) GetJob(_ context.Context, _, _ string) (kube.Job, bool, error) {
 	job := kube.Job{}
-	job.Status.Phase = f.jobPhase
-	if f.jobPhase == "Succeeded" {
+	switch f.jobPhase {
+	case "Running":
+		job.Status.Active = 1
+	case "Succeeded":
+		job.Status.Succeeded = 1
 		job.Status.Conditions = []kube.Condition{{Type: "Complete", Status: "True"}}
-	}
-	if f.jobPhase == "Failed" {
+	case "Failed":
+		job.Status.Failed = 1
 		job.Status.Conditions = []kube.Condition{{Type: "Failed", Status: "True", Reason: "BackoffLimitExceeded"}}
 	}
 	return job, f.found, f.err
@@ -450,7 +453,14 @@ func TestDeriveJobPhase(t *testing.T) {
 	if phase, reason := deriveJobPhase(failed); phase != model.WorkspaceFailed || reason != "BackoffLimitExceeded" {
 		t.Fatalf("failed -> %s/%s", phase, reason)
 	}
-	if phase, _ := deriveJobPhase(kube.JobStatus{Phase: "Running"}); phase != model.WorkspaceRunning {
-		t.Fatalf("running -> %s", phase)
+	// Jobs expose counters, not a phase.
+	if phase, _ := deriveJobPhase(kube.JobStatus{Active: 1}); phase != model.WorkspaceRunning {
+		t.Fatalf("active -> %s", phase)
+	}
+	if phase, _ := deriveJobPhase(kube.JobStatus{Succeeded: 1}); phase != model.WorkspaceSucceeded {
+		t.Fatalf("succeeded counter -> %s", phase)
+	}
+	if phase, reason := deriveJobPhase(kube.JobStatus{Failed: 1, Reason: "DeadlineExceeded"}); phase != model.WorkspaceFailed || reason != "DeadlineExceeded" {
+		t.Fatalf("failed counter -> %s/%s", phase, reason)
 	}
 }

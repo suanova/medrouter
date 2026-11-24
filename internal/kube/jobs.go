@@ -16,13 +16,16 @@ type Job struct {
 	Status   JobStatus  `json:"status"`
 }
 
+// JobStatus mirrors the fields a batch Job actually reports. There is no
+// phase: a Job is Pending while Active is 0, then Running, then terminal via
+// its conditions and counters.
 type JobStatus struct {
-	Phase      string      `json:"phase"`
+	Active     int32       `json:"active"`
+	Succeeded  int32       `json:"succeeded"`
+	Failed     int32       `json:"failed"`
 	Reason     string      `json:"reason"`
 	Message    string      `json:"message"`
 	Conditions []Condition `json:"conditions"`
-	Succeeded  int32       `json:"succeeded"`
-	Failed     int32       `json:"failed"`
 }
 
 // CreateJob posts one batch Job. spec is the Job's spec object.

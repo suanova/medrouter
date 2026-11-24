@@ -711,7 +711,13 @@
       },
       "planOutput": "Artifact path",
       "planDeadline": "Timeout",
-      "dryRunNote": "Dry run: no training job was created. This is what would be launched."
+      "dryRunNote": "Dry run: no training job was created. This is what would be launched.",
+      "phases": {
+        "creating": "Preparing",
+        "running": "Training",
+        "succeeded": "Completed",
+        "failed": "Failed"
+      }
     }
   },
   "home": {

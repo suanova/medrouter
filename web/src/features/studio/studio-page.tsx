@@ -322,6 +322,14 @@ function FavoriteCard({
       </p>
 
       <footer className='st-fav-foot'>
+        {isModel && workspace?.kind === 'finetune' ? (
+          <button type='button' className='ml-btn ml-btn-secondary st-fav-btn' disabled>
+            {workspace.phase === 'creating' || workspace.phase === 'running' ? (
+              <Loader2 className='st-spin' aria-hidden='true' />
+            ) : null}
+            {t(`studio.finetune.phases.${workspace.phase}`)}
+          </button>
+        ) : null}
         {isModel ? (
           <button type='button' className='ml-btn ml-btn-secondary st-fav-btn' onClick={onFinetune}>
             {t('studio.favorites.finetune')}
