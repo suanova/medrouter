@@ -165,7 +165,7 @@ studio:
   requestTimeoutSeconds: 10
   # Fine-tuning: a batch Job from a fixed recipe. Pin the image by digest so a
   # run always uses the stack it was validated against.
-  finetuneImage: harbor.isuanova.com/clyang/medrouter-lora@sha256:6e2dd66d02195665d495aa6103a2e27a2b59ceb66ee419410275563c331f1c16
+  finetuneImage: harbor.isuanova.com/clyang/medrouter-lora@sha256:88ebff1ee999637a2da0efaf893de03418d8fe7fca0e40f134c35198d6fa2f78
   # Where adapters are written on the node (hostPath, created if missing).
   finetuneOutputPath: /data/medrouter/lora
   finetuneDeadlineSeconds: 43200

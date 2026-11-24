@@ -152,7 +152,7 @@ type Config struct {
 
 // defaultFinetuneImage is pinned by digest: a fine-tune must run the exact
 // stack it was validated against, not whatever a floating tag points at now.
-const defaultFinetuneImage = "harbor.isuanova.com/clyang/medrouter-lora@sha256:6e2dd66d02195665d495aa6103a2e27a2b59ceb66ee419410275563c331f1c16"
+const defaultFinetuneImage = "harbor.isuanova.com/clyang/medrouter-lora@sha256:88ebff1ee999637a2da0efaf893de03418d8fe7fca0e40f134c35198d6fa2f78"
 
 // Load reads configuration from the environment. A .env file in the working
 // directory is loaded when present (development convenience).
