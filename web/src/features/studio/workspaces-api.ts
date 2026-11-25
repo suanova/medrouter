@@ -9,6 +9,7 @@ export interface MatchedResources {
   volume?: string
   dataset_size?: string
   idle_timeout_seconds?: number
+  model_version?: string
   base_model?: string
   dataset?: string
   output?: string
@@ -58,12 +59,15 @@ export const WORKSPACES_QUERY_KEY = ['studio', 'workspaces'] as const
 export async function createWorkspace(
   sourceKind: 'model' | 'dataset',
   sourceName: string,
-  datasetName?: string
+  datasetName?: string,
+  /** ModelVersion to deploy; empty means the model's newest version. */
+  version?: string
 ): Promise<Workspace> {
   const response = await api.post<ApiEnvelope<Workspace>>('/studio/workspaces', {
     source_kind: sourceKind,
     source_name: sourceName,
     ...(datasetName ? { dataset_name: datasetName } : {}),
+    ...(version ? { version } : {}),
   })
   return unwrap(response.data)
 }

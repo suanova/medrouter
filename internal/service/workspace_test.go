@@ -950,3 +950,73 @@ func TestWorkspaceDeployAfterFineTuneCreatesInference(t *testing.T) {
 		t.Fatalf("idempotent deploy = %+v / %v", again, apiErr)
 	}
 }
+
+func TestWorkspaceDeployChosenVersion(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	versions := func(_ context.Context, ref string) (ModelArtifact, bool) {
+		switch ref {
+		case "biomistral-7b":
+			return ModelArtifact{
+				Name: "biomistral-7b-medmcqa-u1-lora", Model: "biomistral-7b",
+				Architecture: "mistral", Quantization: "bf16", Storage: hostPathStorage(),
+				Adapter: ".adapters/biomistral-7b-medmcqa-u1-lora",
+			}, true
+		case "biomistral-7b-bf16":
+			return ModelArtifact{
+				Name: "biomistral-7b-bf16", Model: "biomistral-7b",
+				Architecture: "mistral", Quantization: "bf16", Storage: hostPathStorage(),
+			}, true
+		case "lavamed-7b-bf16":
+			return ModelArtifact{
+				Name: "lavamed-7b-bf16", Model: "lavamed-7b",
+				Architecture: "llava-1.5", Quantization: "bf16", Storage: hostPathStorage(),
+			}, true
+		}
+		return ModelArtifact{}, false
+	}
+
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(versions, runtimeProfiles)
+
+	// Deploy the base version explicitly, even though a newer (fine-tuned) one
+	// would be picked by default.
+	workspace, apiErr := svc.CreateVersion(context.Background(), 1, FavoriteModel, "biomistral-7b", "", "biomistral-7b-bf16")
+	if apiErr != nil {
+		t.Fatalf("CreateVersion: %v", apiErr)
+	}
+	spec := cluster.specs[0]
+	if spec["modelRef"] != "biomistral-7b-bf16" {
+		t.Fatalf("modelRef = %v", spec["modelRef"])
+	}
+	if overrides, _ := spec["overrides"].(map[string]any); len(overrides) != 0 {
+		t.Fatalf("the base version must not carry a lora override: %+v", overrides)
+	}
+	if workspace.Matched.ModelVersion != "biomistral-7b-bf16" {
+		t.Fatalf("matched = %+v", workspace.Matched)
+	}
+
+	// Deploying the newest version (no explicit ref) picks the adapter.
+	other := &fakeNotebooks{}
+	svc2 := NewWorkspaceService(studioConfig(false), other, nil).WithDeployment(versions, runtimeProfiles)
+	if _, apiErr := NewFavoriteService().Add(2, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	if _, apiErr := svc2.CreateVersion(context.Background(), 2, FavoriteModel, "biomistral-7b", "", ""); apiErr != nil {
+		t.Fatalf("CreateVersion: %v", apiErr)
+	}
+	if other.specs[0]["modelRef"] != "biomistral-7b-medmcqa-u1-lora" {
+		t.Fatalf("modelRef = %v", other.specs[0]["modelRef"])
+	}
+
+	// A version of another model is refused.
+	if _, apiErr := NewFavoriteService().Add(3, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	svc3 := NewWorkspaceService(studioConfig(false), &fakeNotebooks{}, nil).WithDeployment(versions, runtimeProfiles)
+	if _, apiErr := svc3.CreateVersion(context.Background(), 3, FavoriteModel, "biomistral-7b", "", "lavamed-7b-bf16"); apiErr == nil || apiErr.Code != "VERSION_MISMATCH" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}

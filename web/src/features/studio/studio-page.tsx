@@ -20,7 +20,7 @@ import { datasetListQueryOptions } from '@/features/datasets/queries'
 import { favoritesQueryOptions } from '@/features/favorites/star-button'
 import { PageHead } from '@/features/models/components/page-head'
 import { formatRelativeTime } from '@/features/models/format'
-import { modelListQueryOptions } from '@/features/models/queries'
+import { modelDetailQueryOptions, modelListQueryOptions } from '@/features/models/queries'
 import { apiErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -91,7 +91,8 @@ export function StudioPage() {
     )
 
   const launchMutation = useMutation({
-    mutationFn: (favorite: Favorite) => createWorkspace(favorite.kind, favorite.name),
+    mutationFn: ({ favorite, version }: { favorite: Favorite; version?: string }) =>
+      createWorkspace(favorite.kind, favorite.name, undefined, version),
     onSuccess: (workspace) => {
       if (workspace.dry_run) {
         setPlan(workspace)
@@ -221,7 +222,7 @@ export function StudioPage() {
                     inference={workspaceFor(favorite, 'inference')}
                     finetune={workspaceFor(favorite, 'finetune')}
                     pending={launchMutation.isPending}
-                    onLaunch={() => launchMutation.mutate(favorite)}
+                    onLaunch={(version) => launchMutation.mutate({ favorite, version })}
                     onOpen={openWorkspace}
                     onFinetune={() => setFinetuneModel(favorite.name)}
                   />
@@ -310,7 +311,7 @@ function FavoriteCard({
   inference?: Workspace
   finetune?: Workspace
   pending: boolean
-  onLaunch: () => void
+  onLaunch: (version?: string) => void
   onOpen: (workspace: Workspace) => void
   onFinetune: () => void
 }) {
@@ -318,6 +319,17 @@ function FavoriteCard({
   const isModel = favorite.kind === 'model'
   const Icon = isModel ? Server : BookOpen
   const workspace = inference ?? finetune
+
+  // One model can have several versions; the fine-tuned one is usually the
+  // newest, and that is what deploying without a choice means. The selector
+  // exists so the base version stays reachable.
+  const detail = useQuery({ ...modelDetailQueryOptions(favorite.name), enabled: isModel })
+  const versions = detail.data?.versions ?? []
+  const [chosen, setChosen] = useState<string | undefined>(undefined)
+  // A deployment pins the version it was created with; the selector shows that
+  // instead of pretending another version could be chosen from the same card.
+  const deployed = inference?.matched.model_version
+  const versionRef = deployed || chosen || detail.data?.latest_ref || ''
   // The deploy button follows the deployment only; a running fine-tune must not
   // disable it.
   const deploying = inference?.phase === 'creating'
@@ -339,7 +351,25 @@ function FavoriteCard({
       </header>
 
       <h3 className='st-fav-name'>{favorite.name}</h3>
-      {favorite.meta ? <p className='st-fav-meta'>{favorite.meta}</p> : null}
+      {isModel && versions.length > 0 ? (
+        <label className='st-fav-version'>
+          <span>{t('studio.favorites.version')}</span>
+          <select
+            value={versionRef}
+            disabled={Boolean(inference) || pending}
+            onChange={(event) => setChosen(event.target.value)}
+          >
+            {versions.map((version) => (
+              <option key={version.ref} value={version.ref}>
+                {version.version}
+                {version.is_latest ? ` · ${t('studio.favorites.latest')}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : favorite.meta ? (
+        <p className='st-fav-meta'>{favorite.meta}</p>
+      ) : null}
 
       <p className='st-fav-auto'>
         {workspace?.matched.cpu
@@ -377,7 +407,7 @@ function FavoriteCard({
             type='button'
             className='ml-btn ml-btn-primary st-fav-btn'
             disabled={pending || deploying}
-            onClick={onLaunch}
+            onClick={() => onLaunch(versionRef || undefined)}
           >
             {pending || deploying ? (
               <Loader2 className='st-spin' aria-hidden='true' />

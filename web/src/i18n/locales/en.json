@@ -625,7 +625,9 @@
       "errorText": "Try again in a moment.",
       "retry": "Try again",
       "finetune": "Fine-tune",
-      "deploying": "Deploying…"
+      "deploying": "Deploying…",
+      "version": "Version",
+      "latest": "latest"
     },
     "workspace": {
       "title": "Workbenches",
