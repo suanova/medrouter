@@ -158,6 +158,7 @@ func studioConfig(dryRun bool) *config.Config {
 		StudioDryRun:             dryRun,
 		StudioNamespace:          "medrouter-workspace",
 		StudioNotebookImage:      "harbor.isuanova.com/suanova/jupyter-minimal:latest",
+		StudioNotebookEgress:     true,
 		StudioDatasetPVCPattern:  "%s-data",
 		StudioMaxWorkspaces:      3,
 		StudioFinetuneImage:      "harbor.example/medrouter-lora@sha256:abc",
@@ -265,6 +266,12 @@ func TestWorkspaceCreateCallsClusterAndRecordsRow(t *testing.T) {
 	}
 	if volume["mountPath"] != "/home/jovyan/data/pubmedqa" {
 		t.Fatalf("mountPath = %v", volume["mountPath"])
+	}
+	// Notebooks install packages on their own behalf, so egress is open by
+	// default; the platform restricts it unless asked otherwise.
+	network := spec["network"].(map[string]any)
+	if network["egress"].(map[string]any)["unrestricted"] != true {
+		t.Fatalf("network = %+v", network)
 	}
 
 	// Launching again returns the same workspace instead of creating a second.

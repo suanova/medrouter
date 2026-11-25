@@ -161,6 +161,10 @@ studio:
   # listens on; the studio keeps the path and swaps in this scheme+host. Empty
   # keeps the operator's address (fine when the API is reached directly).
   notebookBaseUrl: ""
+  # Let notebooks reach the network (package installs, dataset downloads). The
+  # platform restricts outbound access by default, and an install that cannot
+  # reach its index fails later as a missing import.
+  notebookEgress: true
   # PVC naming convention produced by the dataset caching layer.
   datasetPVCPattern: "%s-data"
   # Per-user soft limit on active workspaces.

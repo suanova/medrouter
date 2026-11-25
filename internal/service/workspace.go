@@ -445,6 +445,7 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 			"memory": memory,
 		},
 		"lifecycle": map[string]any{"idleTimeout": matched.IdleTimeout},
+		"network":   map[string]any{"egress": map[string]any{"unrestricted": s.cfg.StudioNotebookEgress}},
 		"volumes": []any{
 			map[string]any{
 				"name":      "dataset",
