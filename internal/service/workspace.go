@@ -35,6 +35,9 @@ type WorkspaceCluster interface {
 	GetDevEnvironment(ctx context.Context, namespace, name string) (kube.DevEnvironment, bool, error)
 	SetDevEnvironmentRunning(ctx context.Context, namespace, name string, running bool) error
 	DeleteDevEnvironment(ctx context.Context, namespace, name string) error
+	// GetSecretValue reads one key of a Secret. Studio uses it only for the
+	// token Secret the DevEnvironment's status points at.
+	GetSecretValue(ctx context.Context, namespace, name, key string) (string, bool, error)
 
 	CreateJob(ctx context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.Job, error)
 	GetJob(ctx context.Context, namespace, name string) (kube.Job, bool, error)

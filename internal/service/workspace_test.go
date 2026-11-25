@@ -27,6 +27,10 @@ type fakeNotebooks struct {
 	modelVersionAnnotations []map[string]string
 	// jobStates is per-job-name; when nil the fake falls back to (found, jobPhase).
 	jobStates map[string]string
+	// jupyterSecret is the token Secret the fake environment's status names;
+	// token is what reading it yields.
+	jupyterSecret string
+	token         string
 }
 
 func (f *fakeNotebooks) CreateDevEnvironment(_ context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.DevEnvironment, error) {
@@ -48,7 +52,20 @@ func (f *fakeNotebooks) GetDevEnvironment(_ context.Context, _, _ string) (kube.
 	if f.state.Endpoint != "" {
 		env.Status.Endpoints = []kube.DevEnvironmentEndpoint{{Name: "jupyter", Address: f.state.Endpoint}}
 	}
+	if f.jupyterSecret != "" {
+		env.Status.JupyterTokenSecret = &kube.SecretRef{Name: f.jupyterSecret}
+	}
 	return env, f.found, nil
+}
+
+func (f *fakeNotebooks) GetSecretValue(_ context.Context, _, name, key string) (string, bool, error) {
+	if f.err != nil {
+		return "", false, f.err
+	}
+	if name != f.jupyterSecret || key != "token" || f.token == "" {
+		return "", false, nil
+	}
+	return f.token, true, nil
 }
 
 func (f *fakeNotebooks) SetDevEnvironmentRunning(_ context.Context, _, _ string, running bool) error {
@@ -757,5 +774,68 @@ func TestWorkspaceReconcileRetriesRegistrationAfterSuccess(t *testing.T) {
 	}
 	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
 		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+}
+
+func TestNotebookSessionUsesPublicEndpoint(t *testing.T) {
+	favoriteTestDB(t)
+	starDataset(t, 7, "medmcqa")
+	cluster := &fakeNotebooks{}
+	cfg := studioConfig(false)
+	cfg.StudioNotebookBaseURL = "https://www.medrouter.com:8443"
+	svc := NewWorkspaceService(cfg, cluster, nil)
+
+	workspace, apiErr := svc.Create(context.Background(), 7, FavoriteDataset, "medmcqa", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+
+	// The operator publishes the node address and a token Secret.
+	cluster.found = true
+	cluster.state = kube.NotebookState{Phase: "Running", Endpoint: "http://106.75.251.248/dev/medrouter-workspace/" + workspace.Name + "/"}
+	cluster.jupyterSecret = workspace.Name + "-jupyter-token"
+	cluster.token = "server-token"
+
+	session, apiErr := svc.NotebookSession(context.Background(), 7, workspace.ID)
+	if apiErr != nil {
+		t.Fatalf("NotebookSession: %v", apiErr)
+	}
+	wantPublic := "https://www.medrouter.com:8443/dev/medrouter-workspace/" + workspace.Name + "/lab"
+	if session.URL != wantPublic {
+		t.Fatalf("url = %q, want %q", session.URL, wantPublic)
+	}
+	wantUpstream := "http://106.75.251.248/dev/medrouter-workspace/" + workspace.Name + "/lab"
+	if session.Upstream != wantUpstream {
+		t.Fatalf("upstream = %q, want %q", session.Upstream, wantUpstream)
+	}
+	if session.Token != "server-token" {
+		t.Fatalf("token = %q", session.Token)
+	}
+
+	// Another user cannot open it.
+	if _, apiErr := svc.NotebookSession(context.Background(), 8, workspace.ID); apiErr == nil {
+		t.Fatal("another user must not open the notebook")
+	}
+}
+
+func TestNotebookSessionRequiresRunningEnvironment(t *testing.T) {
+	favoriteTestDB(t)
+	starDataset(t, 7, "medmcqa")
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil)
+
+	workspace, apiErr := svc.Create(context.Background(), 7, FavoriteDataset, "medmcqa", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	cluster.found = true
+	cluster.state = kube.NotebookState{Phase: "Pending"}
+	if _, apiErr := svc.NotebookSession(context.Background(), 7, workspace.ID); apiErr == nil || apiErr.Code != "NOTEBOOK_NOT_RUNNING" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+
+	cluster.state = kube.NotebookState{Phase: "Running", Endpoint: "http://10.0.0.1/dev/ns/lab/"}
+	if _, apiErr := svc.NotebookSession(context.Background(), 7, workspace.ID); apiErr == nil || apiErr.Code != "NOTEBOOK_TOKEN_MISSING" {
+		t.Fatalf("apiErr = %+v", apiErr)
 	}
 }

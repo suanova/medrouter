@@ -29,6 +29,7 @@ import {
   createWorkspace,
   deleteWorkspace,
   fetchWorkspaces,
+  openNotebook,
   setWorkspaceRunning,
   WORKSPACES_QUERY_KEY,
   type Workspace,
@@ -120,12 +121,30 @@ export function StudioPage() {
     onError: (error) => toast.error(apiErrorMessage(error) ?? t('studio.workspace.actionFailed')),
   })
 
-  const openWorkspace = (workspace: Workspace) => {
+  const openWorkspace = async (workspace: Workspace) => {
     if (!workspace.endpoint) {
       toast.info(t('studio.workspace.noEndpoint'))
       return
     }
-    window.open(workspace.endpoint, '_blank', 'noopener')
+    if (workspace.kind !== 'notebook') {
+      window.open(workspace.endpoint, '_blank', 'noopener')
+      return
+    }
+    // Open the tab now, while the click still counts as a gesture: the session
+    // request below decides where it lands, and a tab opened after an await is
+    // what popup blockers stop.
+    const tab = window.open('', '_blank')
+    try {
+      const url = await openNotebook(workspace.id)
+      if (tab) {
+        tab.location.replace(url)
+      } else {
+        window.location.assign(url)
+      }
+    } catch (error) {
+      tab?.close()
+      toast.error(apiErrorMessage(error) ?? t('studio.workspace.actionFailed'))
+    }
   }
 
   return (

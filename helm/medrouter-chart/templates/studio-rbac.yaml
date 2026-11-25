@@ -30,6 +30,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
+  # The notebook login token, read from the Secret the DevEnvironment's status
+  # names. Scoped to the workspace namespace, like everything else here.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
