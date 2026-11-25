@@ -282,7 +282,6 @@ func Load() (*Config, error) {
 		StudioReconcileInterval:  secondsEnv("STUDIO_RECONCILE_INTERVAL_SECONDS", 3),
 		StudioTimeout:            secondsEnv("STUDIO_REQUEST_TIMEOUT_SECONDS", 10),
 		StudioFinetuneImage:      getenv("STUDIO_FINETUNE_IMAGE", defaultFinetuneImage),
-		StudioFinetuneOutput:     strings.TrimRight(getenv("STUDIO_FINETUNE_OUTPUT_PATH", "/data/medrouter/lora"), "/"),
 		StudioFinetuneDeadline:   secondsEnv("STUDIO_FINETUNE_DEADLINE_SECONDS", 43200),
 		StudioFinetuneMaxSamples: intEnv("STUDIO_FINETUNE_MAX_SAMPLES", 20000),
 		StudioGatewayRouter:      getenv("STUDIO_AI_GATEWAY_ROUTER", "cubestack-ai-gateway-private"),
