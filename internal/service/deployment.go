@@ -203,15 +203,37 @@ func (s *WorkspaceService) advanceFineTune(ctx context.Context, row model.Worksp
 	if apiErr := s.registerModelVersion(ctx, row, artifact); apiErr != nil {
 		return model.WorkspaceSucceeded, apiErr.Code, ""
 	}
-	return model.WorkspaceReady, "", row.Name
+	return model.WorkspaceReady, "", modelVersionName(artifact.Model, adapterVersion(row))
 }
+
+// adapterVersion is the version half of a fine-tuned ModelVersion's name. The
+// platform requires metadata.name to be <model>-<version> (optionally with a
+// suffix), so the version cannot simply repeat the workspace name: it is the
+// dataset and owner that distinguish this adapter from the base version.
+func adapterVersion(row model.Workspace) string {
+	var matched MatchedResources
+	_ = json.Unmarshal([]byte(row.Matched), &matched)
+	dataset := matched.Dataset
+	if dataset == "" {
+		dataset = "finetune"
+	}
+	slug := dnsNamePattern.ReplaceAllString(strings.ToLower(dataset), "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		slug = "finetune"
+	}
+	return fmt.Sprintf("%s-u%d-lora", slug, row.OwnerID)
+}
+
+func modelVersionName(baseModel, version string) string { return baseModel + "-" + version }
 
 // registerModelVersion makes the adapter discoverable and deployable. The base
 // family is preserved (same spec.model) so it appears as a version of the
 // original model; the storage stays the base directory and the annotation tells
 // the deployment where the adapter sits inside it.
 func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.Workspace, artifact ModelArtifact) *common.APIError {
-	exists, err := s.cluster.ModelVersionExists(ctx, row.Name)
+	name := modelVersionName(artifact.Model, adapterVersion(row))
+	exists, err := s.cluster.ModelVersionExists(ctx, name)
 	if err != nil {
 		return workspaceAPIError(err)
 	}
@@ -236,7 +258,7 @@ func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.W
 	}
 	spec := map[string]any{
 		"model":        artifact.Model,
-		"version":      row.Name,
+		"version":      adapterVersion(row),
 		"architecture": artifact.Architecture,
 		"quantization": artifact.Quantization,
 		// Same weights as the base: the adapter is a directory inside this
@@ -246,7 +268,7 @@ func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.W
 			"hostPath": map[string]any{"path": artifact.Storage.HostPath.Path},
 		},
 	}
-	if err := s.cluster.CreateModelVersion(ctx, row.Name, labels, annotations, spec); err != nil {
+	if err := s.cluster.CreateModelVersion(ctx, name, labels, annotations, spec); err != nil {
 		var status *kube.StatusError
 		if errors.As(err, &status) && status.Reason == "ALREADY_EXISTS" {
 			return nil
