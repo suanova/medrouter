@@ -714,3 +714,44 @@ func TestPublicEndpointRewritesHostAndKeepsPath(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkspaceReconcileRetriesRegistrationAfterSuccess(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+
+	// The Job finished but the registration attempt was missed (reconciler
+	// down, transient API failure). A row parked at succeeded must still be
+	// picked up on the next pass.
+	cluster.jobStates[workspace.Name] = "Succeeded"
+	if err := model.DB.Model(&model.Workspace{}).Where("id = ?", workspace.ID).
+		Update("phase", model.WorkspaceSucceeded).Error; err != nil {
+		t.Fatalf("park row: %v", err)
+	}
+	svc.Reconcile(context.Background())
+
+	list, _ := svc.List(1)
+	if len(list) != 1 || list[0].Phase != model.WorkspaceReady || list[0].ModelVersion != workspace.Name {
+		t.Fatalf("workspace = %+v", list)
+	}
+	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
+		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+}

@@ -305,7 +305,10 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 		return
 	}
 	var rows []model.Workspace
-	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging}).
+	// `succeeded` is included because registration happens after the Job
+	// completes: if that one attempt fails (or the reconciler was down at the
+	// moment), a row stuck at succeeded must be retried rather than forgotten.
+	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging, model.WorkspaceSucceeded}).
 		Find(&rows).Error
 	if err != nil {
 		return
