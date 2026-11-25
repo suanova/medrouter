@@ -410,6 +410,11 @@ func publicEndpoint(endpoint, base string) string {
 	return strings.TrimRight(base, "/") + path
 }
 
+// notebookHome is where the jupyter image's server is rooted: JupyterLab's
+// file browser cannot navigate above it, so a dataset mounted at /data is
+// readable from code but invisible in the UI. Mount datasets below it instead.
+const notebookHome = "/home/jovyan"
+
 // notebookPlan is the automatic resource choice: size tiers by dataset size,
 // a fixed image, and the dataset PVC mounted read-only.
 func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (MatchedResources, map[string]any) {
@@ -440,7 +445,7 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 		"volumes": []any{
 			map[string]any{
 				"name":      "dataset",
-				"mountPath": "/data/" + dataset,
+				"mountPath": notebookHome + "/data/" + dataset,
 				"pvcName":   volume,
 				"readOnly":  true,
 			},

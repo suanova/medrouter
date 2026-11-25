@@ -235,7 +235,8 @@ func TestWorkspaceCreateCallsClusterAndRecordsRow(t *testing.T) {
 	if cluster.labels[0]["medrouter.io/owner"] != "7" {
 		t.Fatalf("labels = %+v", cluster.labels[0])
 	}
-	// The dataset PVC is mounted read-only at /data/<name>.
+	// The dataset PVC is mounted read-only below the jupyter home, which is the
+	// file browser's root, so it can be opened without leaving the UI.
 	spec := cluster.specs[0]
 	volumes, ok := spec["volumes"].([]any)
 	if !ok || len(volumes) != 1 {
@@ -244,6 +245,9 @@ func TestWorkspaceCreateCallsClusterAndRecordsRow(t *testing.T) {
 	volume := volumes[0].(map[string]any)
 	if volume["pvcName"] != "pubmedqa-data" || volume["readOnly"] != true {
 		t.Fatalf("volume = %+v", volume)
+	}
+	if volume["mountPath"] != "/home/jovyan/data/pubmedqa" {
+		t.Fatalf("mountPath = %v", volume["mountPath"])
 	}
 
 	// Launching again returns the same workspace instead of creating a second.

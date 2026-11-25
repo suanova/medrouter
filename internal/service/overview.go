@@ -23,17 +23,17 @@ type ModelOverview struct {
 	// Model is the strong-validation anchor: must equal ModelVersion.spec.model.
 	Model string `yaml:"model" json:"model"`
 
-	Description       string            `yaml:"description,omitempty" json:"description,omitempty"`
-	IntendedUse       string            `yaml:"intendedUse,omitempty" json:"intended_use,omitempty"`
-	Limitations       []string          `yaml:"limitations,omitempty" json:"limitations,omitempty"`
-	Contraindications []string          `yaml:"contraindications,omitempty" json:"contraindications,omitempty"`
-	OutOfScope        []string          `yaml:"outOfScope,omitempty" json:"out_of_scope,omitempty"`
+	Description       string              `yaml:"description,omitempty" json:"description,omitempty"`
+	IntendedUse       string              `yaml:"intendedUse,omitempty" json:"intended_use,omitempty"`
+	Limitations       []string            `yaml:"limitations,omitempty" json:"limitations,omitempty"`
+	Contraindications []string            `yaml:"contraindications,omitempty" json:"contraindications,omitempty"`
+	OutOfScope        []string            `yaml:"outOfScope,omitempty" json:"out_of_scope,omitempty"`
 	Benchmarks        []OverviewBenchmark `yaml:"benchmarks,omitempty" json:"benchmarks,omitempty"`
-	RegulatoryStatus  string            `yaml:"regulatoryStatus,omitempty" json:"regulatory_status,omitempty"`
-	RegulatoryNote    string            `yaml:"regulatoryNote,omitempty" json:"regulatory_note,omitempty"`
-	Disclaimer        string            `yaml:"disclaimer,omitempty" json:"disclaimer,omitempty"`
-	Links             map[string]any    `yaml:"links,omitempty" json:"links,omitempty"`
-	Extra             map[string]any    `yaml:"extra,omitempty" json:"extra,omitempty"`
+	RegulatoryStatus  string              `yaml:"regulatoryStatus,omitempty" json:"regulatory_status,omitempty"`
+	RegulatoryNote    string              `yaml:"regulatoryNote,omitempty" json:"regulatory_note,omitempty"`
+	Disclaimer        string              `yaml:"disclaimer,omitempty" json:"disclaimer,omitempty"`
+	Links             map[string]any      `yaml:"links,omitempty" json:"links,omitempty"`
+	Extra             map[string]any      `yaml:"extra,omitempty" json:"extra,omitempty"`
 
 	Valid bool   `yaml:"-" json:"-"`
 	Error string `yaml:"-" json:"-"`
@@ -66,17 +66,17 @@ type DatasetOverview struct {
 	// Dataset is the strong-validation anchor: must equal Dataset.spec.dataset.
 	Dataset string `yaml:"dataset" json:"dataset"`
 
-	Description       string            `yaml:"description,omitempty" json:"description,omitempty"`
-	IntendedUse       string            `yaml:"intendedUse,omitempty" json:"intended_use,omitempty"`
-	Limitations       []string          `yaml:"limitations,omitempty" json:"limitations,omitempty"`
-	Contraindications []string          `yaml:"contraindications,omitempty" json:"contraindications,omitempty"`
-	OutOfScope        []string          `yaml:"outOfScope,omitempty" json:"out_of_scope,omitempty"`
+	Description       string              `yaml:"description,omitempty" json:"description,omitempty"`
+	IntendedUse       string              `yaml:"intendedUse,omitempty" json:"intended_use,omitempty"`
+	Limitations       []string            `yaml:"limitations,omitempty" json:"limitations,omitempty"`
+	Contraindications []string            `yaml:"contraindications,omitempty" json:"contraindications,omitempty"`
+	OutOfScope        []string            `yaml:"outOfScope,omitempty" json:"out_of_scope,omitempty"`
 	Benchmarks        []OverviewBenchmark `yaml:"benchmarks,omitempty" json:"benchmarks,omitempty"`
-	RegulatoryStatus  string            `yaml:"regulatoryStatus,omitempty" json:"regulatory_status,omitempty"`
-	RegulatoryNote    string            `yaml:"regulatoryNote,omitempty" json:"regulatory_note,omitempty"`
-	Disclaimer        string            `yaml:"disclaimer,omitempty" json:"disclaimer,omitempty"`
-	Links             map[string]any    `yaml:"links,omitempty" json:"links,omitempty"`
-	Extra             map[string]any    `yaml:"extra,omitempty" json:"extra,omitempty"`
+	RegulatoryStatus  string              `yaml:"regulatoryStatus,omitempty" json:"regulatory_status,omitempty"`
+	RegulatoryNote    string              `yaml:"regulatoryNote,omitempty" json:"regulatory_note,omitempty"`
+	Disclaimer        string              `yaml:"disclaimer,omitempty" json:"disclaimer,omitempty"`
+	Links             map[string]any      `yaml:"links,omitempty" json:"links,omitempty"`
+	Extra             map[string]any      `yaml:"extra,omitempty" json:"extra,omitempty"`
 
 	Valid bool   `yaml:"-" json:"-"`
 	Error string `yaml:"-" json:"-"`
