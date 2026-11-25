@@ -788,7 +788,7 @@ func TestNotebookSessionUsesPublicEndpoint(t *testing.T) {
 	starDataset(t, 7, "medmcqa")
 	cluster := &fakeNotebooks{}
 	cfg := studioConfig(false)
-	cfg.StudioNotebookBaseURL = "https://www.medrouter.com:8443"
+	cfg.PublicOrigin = "https://www.medrouter.com:8443"
 	svc := NewWorkspaceService(cfg, cluster, nil)
 
 	workspace, apiErr := svc.Create(context.Background(), 7, FavoriteDataset, "medmcqa", "")

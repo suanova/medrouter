@@ -71,7 +71,7 @@ func (s *WorkspaceService) NotebookSession(ctx context.Context, ownerID, id int6
 			"The notebook's login token could not be read")
 	}
 
-	published := publicEndpoint(state.Endpoint, s.cfg.StudioNotebookBaseURL)
+	published := publicEndpoint(state.Endpoint, s.cfg.PublicOrigin)
 	public, err := labURL(published)
 	if err != nil {
 		return NotebookSession{}, common.NewAPIErrorStatus(http.StatusBadGateway, "NOTEBOOK_UNREACHABLE",
