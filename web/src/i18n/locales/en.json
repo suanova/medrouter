@@ -718,7 +718,8 @@
         "creating": "Preparing",
         "running": "Training",
         "succeeded": "Completed",
-        "failed": "Failed"
+        "failed": "Failed",
+        "ready": "Ready"
       }
     }
   },

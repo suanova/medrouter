@@ -712,7 +712,8 @@
         "creating": "训练准备中",
         "running": "训练中",
         "succeeded": "已完成",
-        "failed": "训练失败"
+        "failed": "训练失败",
+        "ready": "已就绪"
       }
     }
   },
