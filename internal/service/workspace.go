@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -345,6 +346,7 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 			continue
 		}
 		state := kube.NotebookStateOf(env)
+		state.Endpoint = publicEndpoint(state.Endpoint, s.cfg.StudioNotebookBaseURL)
 		phase, reason := derivePhase(state)
 		if phase == row.Phase && reason == row.Reason && state.Endpoint == row.Endpoint {
 			continue
@@ -382,6 +384,27 @@ func (s *WorkspaceService) owned(ownerID, id int64) (*model.Workspace, *common.A
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read the workspace")
 	}
 	return &row, nil
+}
+
+// publicEndpoint keeps the path the operator published and swaps its scheme
+// and host for the public base. The operator reports the address it listens on
+// (http://<node-ip>/dev/<ns>/<name>/), which is not where users reach it.
+func publicEndpoint(endpoint, base string) string {
+	if endpoint == "" || base == "" {
+		return endpoint
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path == "" {
+		return endpoint
+	}
+	path := parsed.EscapedPath()
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if parsed.RawQuery != "" {
+		path += "?" + parsed.RawQuery
+	}
+	return strings.TrimRight(base, "/") + path
 }
 
 // notebookPlan is the automatic resource choice: size tiers by dataset size,

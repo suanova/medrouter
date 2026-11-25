@@ -697,3 +697,20 @@ func TestWorkspaceDeployBaseHasNoLoRAOverride(t *testing.T) {
 		t.Fatalf("base deployment must not set lora_paths: %+v", overrides)
 	}
 }
+
+func TestPublicEndpointRewritesHostAndKeepsPath(t *testing.T) {
+	cases := []struct{ endpoint, base, want string }{
+		{"http://106.75.251.248/dev/medrouter-workspace/lab/", "https://www.medrouter.com:8443", "https://www.medrouter.com:8443/dev/medrouter-workspace/lab/"},
+		{"http://106.75.251.248/dev/medrouter-workspace/lab/", "https://www.medrouter.com:8443/", "https://www.medrouter.com:8443/dev/medrouter-workspace/lab/"},
+		{"http://10.66.3.166:8080/dev/ns/lab", "https://www.medrouter.com", "https://www.medrouter.com/dev/ns/lab"},
+		{"http://10.66.3.166/dev/ns/lab?token=abc", "https://www.medrouter.com", "https://www.medrouter.com/dev/ns/lab?token=abc"},
+		{"http://106.75.251.248/dev/ns/lab/", "", "http://106.75.251.248/dev/ns/lab/"},
+		{"", "https://www.medrouter.com", ""},
+		{"not a url", "https://www.medrouter.com", "not a url"},
+	}
+	for _, tc := range cases {
+		if got := publicEndpoint(tc.endpoint, tc.base); got != tc.want {
+			t.Fatalf("publicEndpoint(%q, %q) = %q, want %q", tc.endpoint, tc.base, got, tc.want)
+		}
+	}
+}

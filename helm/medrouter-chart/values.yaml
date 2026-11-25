@@ -157,6 +157,10 @@ studio:
   # ResourceQuota so one user cannot exhaust the cluster.
   namespace: medrouter-workspace
   notebookImage: harbor.isuanova.com/suanova/jupyter-minimal:latest
+  # Public base for notebook links. The operator publishes the node address it
+  # listens on; the studio keeps the path and swaps in this scheme+host. Empty
+  # keeps the operator's address (fine when the API is reached directly).
+  notebookBaseUrl: ""
   # PVC naming convention produced by the dataset caching layer.
   datasetPVCPattern: "%s-data"
   # Per-user soft limit on active workspaces.
