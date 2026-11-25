@@ -437,7 +437,10 @@ function WorkspaceCard({
           .filter(Boolean)
           .join(' · ')}
       </p>
-      {workspace.endpoint ? (
+      {/* A notebook has no use for its printed URL: the browser is signed in
+          and taken straight to it by the open button. Deployments keep theirs,
+          because that is the address a client calls. */}
+      {workspace.kind !== 'notebook' && workspace.endpoint ? (
         <p className='st-work-endpoint' title={workspace.endpoint}>
           {workspace.endpoint}
         </p>
