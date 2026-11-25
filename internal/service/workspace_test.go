@@ -846,3 +846,56 @@ func TestNotebookSessionRequiresRunningEnvironment(t *testing.T) {
 		t.Fatalf("apiErr = %+v", apiErr)
 	}
 }
+
+func TestWorkspaceFineTuneRetriesRegistrationOnceBaseResolves(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	// The catalog is loaded after the first reconcile, so the base model can be
+	// unresolved for a moment while an already-finished Job is being registered.
+	catalogReady := false
+	modelInfo := func(ctx context.Context, ref string) (ModelArtifact, bool) {
+		if !catalogReady {
+			return ModelArtifact{}, false
+		}
+		return deployableModel(ctx, ref)
+	}
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(modelInfo, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	cluster.jobStates[workspace.Name] = "Succeeded"
+
+	// Training finished, registration cannot run yet: the run is reported as
+	// finished with the reason, not as a failed training.
+	svc.Reconcile(context.Background())
+	list, _ := svc.List(1)
+	if len(list) != 1 || list[0].Phase != model.WorkspaceSucceeded || list[0].Reason != "BASE_MODEL_MISSING" {
+		t.Fatalf("workspace = %+v", list)
+	}
+
+	// The catalog arrives; the next pass registers the adapter.
+	catalogReady = true
+	svc.Reconcile(context.Background())
+	list, _ = svc.List(1)
+	if len(list) != 1 || list[0].Phase != model.WorkspaceReady || list[0].ModelVersion != workspace.Name {
+		t.Fatalf("workspace = %+v", list)
+	}
+	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
+		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+}

@@ -193,12 +193,15 @@ func (s *WorkspaceService) advanceFineTune(ctx context.Context, row model.Worksp
 	if s.cfg.StudioDryRun || s.cluster == nil || s.modelInfo == nil {
 		return model.WorkspaceSucceeded, "", ""
 	}
+	// Training itself is done, so a registration problem is reported with the
+	// reason on a successful run rather than as a failed one: the work the user
+	// asked for completed, and the registration is retried on the next pass.
 	artifact, ok := s.modelInfo(ctx, row.SourceName)
 	if !ok {
-		return model.WorkspaceFailed, "BASE_MODEL_MISSING", ""
+		return model.WorkspaceSucceeded, "BASE_MODEL_MISSING", ""
 	}
 	if apiErr := s.registerModelVersion(ctx, row, artifact); apiErr != nil {
-		return model.WorkspaceFailed, apiErr.Code, ""
+		return model.WorkspaceSucceeded, apiErr.Code, ""
 	}
 	return model.WorkspaceReady, "", row.Name
 }

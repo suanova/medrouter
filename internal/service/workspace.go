@@ -311,7 +311,11 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 	// `succeeded` is included because registration happens after the Job
 	// completes: if that one attempt fails (or the reconciler was down at the
 	// moment), a row stuck at succeeded must be retried rather than forgotten.
-	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging, model.WorkspaceSucceeded}).
+	// `failed` is included for the same reason: a failure recorded while a
+	// dependency was briefly unavailable (the catalog is loaded after the first
+	// reconcile) is re-derived from the resource on every pass, and a row whose
+	// resource is still failed simply derives the same phase and writes nothing.
+	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging, model.WorkspaceSucceeded, model.WorkspaceFailed}).
 		Find(&rows).Error
 	if err != nil {
 		return
