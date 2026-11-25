@@ -668,6 +668,15 @@ func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
 	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
 		t.Fatalf("model versions = %+v", cluster.modelVersions)
 	}
+	// The platform requires metadata.name == <model>-<version>, so the version
+	// is the part that distinguishes this adapter, not a repeat of the name.
+	spec := cluster.modelVersionSpecs[0]
+	if spec["version"] != "medmcqa-u1-lora" {
+		t.Fatalf("version = %v", spec["version"])
+	}
+	if spec["model"].(string)+"-"+spec["version"].(string) != cluster.modelVersions[0] {
+		t.Fatalf("name %q is not <model>-<version> (%v)", cluster.modelVersions[0], spec)
+	}
 	if cluster.modelVersionAnnotations[0]["medrouter.io/lora-adapter"] != ".adapters/"+workspace.Name {
 		t.Fatalf("annotations = %+v", cluster.modelVersionAnnotations[0])
 	}
