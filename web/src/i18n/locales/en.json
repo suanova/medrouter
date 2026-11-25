@@ -615,7 +615,6 @@
       },
       "deploy": "Deploy",
       "start": "Start environment",
-      "starting": "Starting…",
       "matching": "Matching compute for {{name}}…",
       "autoMatchInference": "Runtime, engine and cards are matched automatically",
       "autoMatchNotebook": "Size, image and cards are matched automatically",
@@ -625,7 +624,8 @@
       "errorTitle": "Your favorites could not be loaded",
       "errorText": "Try again in a moment.",
       "retry": "Try again",
-      "finetune": "Fine-tune"
+      "finetune": "Fine-tune",
+      "deploying": "Deploying…"
     },
     "workspace": {
       "title": "Workbenches",

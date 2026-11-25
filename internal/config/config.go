@@ -131,10 +131,20 @@ type Config struct {
 	// Studio launches one-click workspaces from favorites. DryRun computes and
 	// returns the plan without creating a Custom Resource, which lets the
 	// resource matching be validated before write access is granted.
-	StudioEnabled           bool
-	StudioDryRun            bool
-	StudioNamespace         string
-	StudioNotebookImage     string
+	StudioEnabled       bool
+	StudioDryRun        bool
+	StudioNamespace     string
+	StudioNotebookImage string
+	// StudioNotebookBaseURL replaces the scheme and host of the endpoint the
+	// operator publishes. The operator reports the node address it listens on;
+	// users reach the same path through the public site instead. Empty keeps
+	// the operator's address.
+	StudioNotebookBaseURL string
+	// StudioNotebookEgress lifts the platform's outbound restriction on
+	// notebooks. A notebook that installs a package or downloads a dataset does
+	// so on its own behalf, and the restricted default both fails silently at
+	// the network and misreports the failure as a missing import.
+	StudioNotebookEgress    bool
 	StudioDatasetPVCPattern string
 	StudioMaxWorkspaces     int
 	StudioReconcileInterval time.Duration
@@ -277,6 +287,8 @@ func Load() (*Config, error) {
 		StudioDryRun:             boolEnv("STUDIO_DRY_RUN", true),
 		StudioNamespace:          getenv("STUDIO_NAMESPACE", "medrouter-workspace"),
 		StudioNotebookImage:      getenv("STUDIO_NOTEBOOK_IMAGE", "harbor.isuanova.com/suanova/jupyter-minimal:latest"),
+		StudioNotebookBaseURL:    strings.TrimRight(getenv("STUDIO_NOTEBOOK_BASE_URL", ""), "/"),
+		StudioNotebookEgress:     boolEnv("STUDIO_NOTEBOOK_EGRESS", true),
 		StudioDatasetPVCPattern:  getenv("STUDIO_DATASET_PVC_PATTERN", "%s-data"),
 		StudioMaxWorkspaces:      intEnv("STUDIO_MAX_WORKSPACES", 3),
 		StudioReconcileInterval:  secondsEnv("STUDIO_RECONCILE_INTERVAL_SECONDS", 3),

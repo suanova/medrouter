@@ -27,6 +27,10 @@ type fakeNotebooks struct {
 	modelVersionAnnotations []map[string]string
 	// jobStates is per-job-name; when nil the fake falls back to (found, jobPhase).
 	jobStates map[string]string
+	// jupyterSecret is the token Secret the fake environment's status names;
+	// token is what reading it yields.
+	jupyterSecret string
+	token         string
 }
 
 func (f *fakeNotebooks) CreateDevEnvironment(_ context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.DevEnvironment, error) {
@@ -48,7 +52,20 @@ func (f *fakeNotebooks) GetDevEnvironment(_ context.Context, _, _ string) (kube.
 	if f.state.Endpoint != "" {
 		env.Status.Endpoints = []kube.DevEnvironmentEndpoint{{Name: "jupyter", Address: f.state.Endpoint}}
 	}
+	if f.jupyterSecret != "" {
+		env.Status.JupyterTokenSecret = &kube.SecretRef{Name: f.jupyterSecret}
+	}
 	return env, f.found, nil
+}
+
+func (f *fakeNotebooks) GetSecretValue(_ context.Context, _, name, key string) (string, bool, error) {
+	if f.err != nil {
+		return "", false, f.err
+	}
+	if name != f.jupyterSecret || key != "token" || f.token == "" {
+		return "", false, nil
+	}
+	return f.token, true, nil
 }
 
 func (f *fakeNotebooks) SetDevEnvironmentRunning(_ context.Context, _, _ string, running bool) error {
@@ -141,6 +158,7 @@ func studioConfig(dryRun bool) *config.Config {
 		StudioDryRun:             dryRun,
 		StudioNamespace:          "medrouter-workspace",
 		StudioNotebookImage:      "harbor.isuanova.com/suanova/jupyter-minimal:latest",
+		StudioNotebookEgress:     true,
 		StudioDatasetPVCPattern:  "%s-data",
 		StudioMaxWorkspaces:      3,
 		StudioFinetuneImage:      "harbor.example/medrouter-lora@sha256:abc",
@@ -182,7 +200,7 @@ func TestWorkspaceDryRunReturnsPlan(t *testing.T) {
 	if !plan.DryRun || plan.Phase != WorkspacePlanned {
 		t.Fatalf("plan = %+v", plan)
 	}
-	if plan.Matched.CPU != "8" || plan.Matched.Memory != "32Gi" {
+	if plan.Matched.CPU != "4" || plan.Matched.Memory != "8Gi" {
 		t.Fatalf("matched = %+v", plan.Matched)
 	}
 	if plan.Matched.Volume != "pubmedqa-data" || plan.Matched.DatasetSize != "287Mi" {
@@ -199,16 +217,16 @@ func TestWorkspaceDryRunReturnsPlan(t *testing.T) {
 
 func TestWorkspaceSizeTiers(t *testing.T) {
 	cases := []struct{ size, cpu, memory string }{
-		{"287Mi", "8", "32Gi"},
-		{"9Gi", "8", "32Gi"},
-		{"10Gi", "16", "64Gi"},
-		{"99Gi", "16", "64Gi"},
-		{"100Gi", "32", "128Gi"},
-		{"2Ti", "32", "128Gi"},
-		{"unknown", "8", "32Gi"},
+		{"287Mi", "4", "8Gi"},
+		{"9Gi", "4", "8Gi"},
+		{"10Gi", "8", "16Gi"},
+		{"99Gi", "8", "16Gi"},
+		{"100Gi", "12", "24Gi"},
+		{"2Ti", "12", "24Gi"},
+		{"unknown", "4", "8Gi"},
 	}
 	for _, tc := range cases {
-		cpu, memory, _ := notebookTier(tc.size)
+		cpu, memory := notebookTier(tc.size)
 		if cpu != tc.cpu || memory != tc.memory {
 			t.Fatalf("%s -> %s/%s, want %s/%s", tc.size, cpu, memory, tc.cpu, tc.memory)
 		}
@@ -234,7 +252,8 @@ func TestWorkspaceCreateCallsClusterAndRecordsRow(t *testing.T) {
 	if cluster.labels[0]["medrouter.io/owner"] != "7" {
 		t.Fatalf("labels = %+v", cluster.labels[0])
 	}
-	// The dataset PVC is mounted read-only at /data/<name>.
+	// The dataset PVC is mounted read-only below the jupyter home, which is the
+	// file browser's root, so it can be opened without leaving the UI.
 	spec := cluster.specs[0]
 	volumes, ok := spec["volumes"].([]any)
 	if !ok || len(volumes) != 1 {
@@ -243,6 +262,15 @@ func TestWorkspaceCreateCallsClusterAndRecordsRow(t *testing.T) {
 	volume := volumes[0].(map[string]any)
 	if volume["pvcName"] != "pubmedqa-data" || volume["readOnly"] != true {
 		t.Fatalf("volume = %+v", volume)
+	}
+	if volume["mountPath"] != "/home/jovyan/data/pubmedqa" {
+		t.Fatalf("mountPath = %v", volume["mountPath"])
+	}
+	// Notebooks install packages on their own behalf, so egress is open by
+	// default; the platform restricts it unless asked otherwise.
+	network := spec["network"].(map[string]any)
+	if network["egress"].(map[string]any)["unrestricted"] != true {
+		t.Fatalf("network = %+v", network)
 	}
 
 	// Launching again returns the same workspace instead of creating a second.
@@ -694,5 +722,126 @@ func TestWorkspaceDeployBaseHasNoLoRAOverride(t *testing.T) {
 	overrides := cluster.specs[0]["overrides"].(map[string]any)
 	if _, ok := overrides["lora_paths"]; ok {
 		t.Fatalf("base deployment must not set lora_paths: %+v", overrides)
+	}
+}
+
+func TestPublicEndpointRewritesHostAndKeepsPath(t *testing.T) {
+	cases := []struct{ endpoint, base, want string }{
+		{"http://106.75.251.248/dev/medrouter-workspace/lab/", "https://www.medrouter.com:8443", "https://www.medrouter.com:8443/dev/medrouter-workspace/lab/"},
+		{"http://106.75.251.248/dev/medrouter-workspace/lab/", "https://www.medrouter.com:8443/", "https://www.medrouter.com:8443/dev/medrouter-workspace/lab/"},
+		{"http://10.66.3.166:8080/dev/ns/lab", "https://www.medrouter.com", "https://www.medrouter.com/dev/ns/lab"},
+		{"http://10.66.3.166/dev/ns/lab?token=abc", "https://www.medrouter.com", "https://www.medrouter.com/dev/ns/lab?token=abc"},
+		{"http://106.75.251.248/dev/ns/lab/", "", "http://106.75.251.248/dev/ns/lab/"},
+		{"", "https://www.medrouter.com", ""},
+		{"not a url", "https://www.medrouter.com", "not a url"},
+	}
+	for _, tc := range cases {
+		if got := publicEndpoint(tc.endpoint, tc.base); got != tc.want {
+			t.Fatalf("publicEndpoint(%q, %q) = %q, want %q", tc.endpoint, tc.base, got, tc.want)
+		}
+	}
+}
+
+func TestWorkspaceReconcileRetriesRegistrationAfterSuccess(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	workspace, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+
+	// The Job finished but the registration attempt was missed (reconciler
+	// down, transient API failure). A row parked at succeeded must still be
+	// picked up on the next pass.
+	cluster.jobStates[workspace.Name] = "Succeeded"
+	if err := model.DB.Model(&model.Workspace{}).Where("id = ?", workspace.ID).
+		Update("phase", model.WorkspaceSucceeded).Error; err != nil {
+		t.Fatalf("park row: %v", err)
+	}
+	svc.Reconcile(context.Background())
+
+	list, _ := svc.List(1)
+	if len(list) != 1 || list[0].Phase != model.WorkspaceReady || list[0].ModelVersion != workspace.Name {
+		t.Fatalf("workspace = %+v", list)
+	}
+	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
+		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+}
+
+func TestNotebookSessionUsesPublicEndpoint(t *testing.T) {
+	favoriteTestDB(t)
+	starDataset(t, 7, "medmcqa")
+	cluster := &fakeNotebooks{}
+	cfg := studioConfig(false)
+	cfg.StudioNotebookBaseURL = "https://www.medrouter.com:8443"
+	svc := NewWorkspaceService(cfg, cluster, nil)
+
+	workspace, apiErr := svc.Create(context.Background(), 7, FavoriteDataset, "medmcqa", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+
+	// The operator publishes the node address and a token Secret.
+	cluster.found = true
+	cluster.state = kube.NotebookState{Phase: "Running", Endpoint: "http://106.75.251.248/dev/medrouter-workspace/" + workspace.Name + "/"}
+	cluster.jupyterSecret = workspace.Name + "-jupyter-token"
+	cluster.token = "server-token"
+
+	session, apiErr := svc.NotebookSession(context.Background(), 7, workspace.ID)
+	if apiErr != nil {
+		t.Fatalf("NotebookSession: %v", apiErr)
+	}
+	wantPublic := "https://www.medrouter.com:8443/dev/medrouter-workspace/" + workspace.Name + "/lab"
+	if session.URL != wantPublic {
+		t.Fatalf("url = %q, want %q", session.URL, wantPublic)
+	}
+	wantUpstream := "http://106.75.251.248/dev/medrouter-workspace/" + workspace.Name + "/lab"
+	if session.Upstream != wantUpstream {
+		t.Fatalf("upstream = %q, want %q", session.Upstream, wantUpstream)
+	}
+	if session.Token != "server-token" {
+		t.Fatalf("token = %q", session.Token)
+	}
+
+	// Another user cannot open it.
+	if _, apiErr := svc.NotebookSession(context.Background(), 8, workspace.ID); apiErr == nil {
+		t.Fatal("another user must not open the notebook")
+	}
+}
+
+func TestNotebookSessionRequiresRunningEnvironment(t *testing.T) {
+	favoriteTestDB(t)
+	starDataset(t, 7, "medmcqa")
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil)
+
+	workspace, apiErr := svc.Create(context.Background(), 7, FavoriteDataset, "medmcqa", "")
+	if apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	cluster.found = true
+	cluster.state = kube.NotebookState{Phase: "Pending"}
+	if _, apiErr := svc.NotebookSession(context.Background(), 7, workspace.ID); apiErr == nil || apiErr.Code != "NOTEBOOK_NOT_RUNNING" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+
+	cluster.state = kube.NotebookState{Phase: "Running", Endpoint: "http://10.0.0.1/dev/ns/lab/"}
+	if _, apiErr := svc.NotebookSession(context.Background(), 7, workspace.ID); apiErr == nil || apiErr.Code != "NOTEBOOK_TOKEN_MISSING" {
+		t.Fatalf("apiErr = %+v", apiErr)
 	}
 }

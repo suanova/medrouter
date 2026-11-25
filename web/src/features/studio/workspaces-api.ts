@@ -75,6 +75,15 @@ export async function setWorkspaceRunning(id: number, running: boolean): Promise
   return unwrap(response.data)
 }
 
+/**
+ * Signs the browser into a running notebook without asking for its token and
+ * returns the URL to navigate to. The server relays only the session cookie.
+ */
+export async function openNotebook(id: number): Promise<string> {
+  const response = await api.post<ApiEnvelope<{ url: string }>>(`/studio/workspaces/${id}/open`)
+  return unwrap(response.data).url
+}
+
 export async function deleteWorkspace(id: number): Promise<void> {
   await api.delete(`/studio/workspaces/${id}`)
 }

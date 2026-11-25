@@ -3,6 +3,7 @@ package kube
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,15 @@ type DevEnvironmentStatus struct {
 	} `json:"phase"`
 	Conditions []Condition              `json:"conditions"`
 	Endpoints  []DevEnvironmentEndpoint `json:"endpoints"`
+	// JupyterTokenSecret is the Secret the operator minted the notebook's
+	// server token into. It is absent until the environment is created.
+	JupyterTokenSecret *SecretRef `json:"jupyterTokenSecret,omitempty"`
+}
+
+// SecretRef names one Secret.
+type SecretRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 type DevEnvironmentEndpoint struct {
@@ -93,6 +103,32 @@ func NotebookStateOf(env DevEnvironment) NotebookState {
 		}
 	}
 	return state
+}
+
+// GetSecretValue reads one decoded value out of a Secret. found is false when
+// the Secret or the key is missing, which the caller reports as "no token yet"
+// rather than an error.
+func (c *Client) GetSecretValue(ctx context.Context, namespace, name, key string) (string, bool, error) {
+	var secret struct {
+		Data map[string]string `json:"data"`
+	}
+	err := c.send(ctx, http.MethodGet, "/api/v1/namespaces/"+namespace+"/secrets/"+name, "", nil, &secret)
+	if err != nil {
+		var status *StatusError
+		if errors.As(err, &status) && status.Status == http.StatusNotFound {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	encoded, ok := secret.Data[key]
+	if !ok || encoded == "" {
+		return "", false, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", false, err
+	}
+	return string(decoded), true, nil
 }
 
 // send performs one request against the Kubernetes REST API. contentType is

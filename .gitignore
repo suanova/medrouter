@@ -8,6 +8,7 @@
 /medrouter
 /web/dist/
 /web/node_modules/
+/web/tsconfig.tsbuildinfo
 /web/.tanstack/
 
 # Local data

@@ -76,6 +76,7 @@ func New(d Deps) *gin.Engine {
 	protected.DELETE("/studio/favorites/:kind/:name", d.Studio.RemoveFavorite)
 	protected.GET("/studio/workspaces", d.Studio.ListWorkspaces)
 	protected.POST("/studio/workspaces", d.Studio.CreateWorkspace)
+	protected.POST("/studio/workspaces/:id/open", d.Studio.OpenNotebook)
 	protected.POST("/studio/workspaces/:id/:action", d.Studio.SetWorkspaceRunning)
 	protected.DELETE("/studio/workspaces/:id", d.Studio.DeleteWorkspace)
 	protected.GET("/studio/finetune/targets", d.Studio.FineTuneTargets)

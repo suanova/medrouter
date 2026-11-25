@@ -1,8 +1,15 @@
 package controller
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -163,6 +170,107 @@ func (h *StudioController) DeleteWorkspace(c *gin.Context) {
 		return
 	}
 	common.Success(c, gin.H{"id": id})
+}
+
+// OpenNotebook signs the browser into a running notebook and hands it the
+// address to open. The token never leaves the server: the login call is made
+// here, and only Jupyter's identity cookie is relayed to the browser.
+func (h *StudioController) OpenNotebook(c *gin.Context) {
+	userID, ok := h.requireUser(c)
+	if !ok {
+		return
+	}
+	id, apiErr := workspaceID(c)
+	if apiErr != nil {
+		common.Fail(c, apiErr)
+		return
+	}
+	session, apiErr := h.workspaces.NotebookSession(c.Request.Context(), *userID, id)
+	if apiErr != nil {
+		common.Fail(c, apiErr)
+		return
+	}
+	cookies, err := loginJupyter(c.Request.Context(), session)
+	if err != nil {
+		common.Fail(c, common.NewAPIErrorStatus(http.StatusBadGateway, "JUPYTER_LOGIN_FAILED",
+			"The notebook did not accept the login"))
+		return
+	}
+	for _, cookie := range cookies {
+		c.Writer.Header().Add("Set-Cookie", cookie)
+	}
+	// A session response is never cached anywhere.
+	c.Header("Cache-Control", "no-store")
+	common.Success(c, gin.H{"url": session.URL})
+}
+
+// jupyterClient does not follow redirects: a login that answers with one is a
+// login that failed, and following it would hide where the request went.
+var jupyterClient = &http.Client{
+	Timeout: 10 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// loginJupyter authenticates against the environment's own endpoint with the
+// server token and returns the identity cookie, re-scoped to the environment's
+// path on the browser's origin.
+func loginJupyter(ctx context.Context, session service.NotebookSession) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, session.Upstream, nil)
+	if err != nil {
+		return nil, err
+	}
+	// The token travels in a header, never in a URL.
+	req.Header.Set("Authorization", "token "+session.Token)
+	resp, err := jupyterClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<10))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("login answered %d", resp.StatusCode)
+	}
+
+	published, err := url.Parse(session.URL)
+	if err != nil {
+		return nil, err
+	}
+	path := published.Path
+	if !strings.HasSuffix(path, "/") {
+		path = path[:strings.LastIndex(path, "/")+1]
+	}
+	cookies := relayJupyterCookies(resp.Header.Values("Set-Cookie"), path, published.Scheme == "https")
+	if len(cookies) == 0 {
+		return nil, errors.New("the notebook set no identity cookie")
+	}
+	return cookies, nil
+}
+
+// relayJupyterCookies keeps Jupyter's identity cookie and drops everything
+// else. The XSRF cookie is installed by the page load that follows, with the
+// attributes the server itself wants, so relaying it would only be a second
+// guess. Only name and value are kept; the scope is the environment's own path
+// and the browser session's lifetime.
+func relayJupyterCookies(setCookies []string, path string, secure bool) []string {
+	out := make([]string, 0, len(setCookies))
+	for _, raw := range setCookies {
+		pair := raw
+		if cut := strings.Index(pair, ";"); cut >= 0 {
+			pair = pair[:cut]
+		}
+		name, _, ok := strings.Cut(pair, "=")
+		if !ok || !strings.HasPrefix(name, "username-") {
+			continue
+		}
+		cookie := pair + "; Path=" + path + "; HttpOnly; SameSite=Lax"
+		if secure {
+			cookie += "; Secure"
+		}
+		out = append(out, cookie)
+	}
+	return out
 }
 
 func workspaceID(c *gin.Context) (int64, *common.APIError) {

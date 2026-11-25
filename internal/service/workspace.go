@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -34,6 +35,9 @@ type WorkspaceCluster interface {
 	GetDevEnvironment(ctx context.Context, namespace, name string) (kube.DevEnvironment, bool, error)
 	SetDevEnvironmentRunning(ctx context.Context, namespace, name string, running bool) error
 	DeleteDevEnvironment(ctx context.Context, namespace, name string) error
+	// GetSecretValue reads one key of a Secret. Studio uses it only for the
+	// token Secret the DevEnvironment's status points at.
+	GetSecretValue(ctx context.Context, namespace, name, key string) (string, bool, error)
 
 	CreateJob(ctx context.Context, namespace, name string, labels map[string]string, spec map[string]any) (kube.Job, error)
 	GetJob(ctx context.Context, namespace, name string) (kube.Job, bool, error)
@@ -304,7 +308,10 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 		return
 	}
 	var rows []model.Workspace
-	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging}).
+	// `succeeded` is included because registration happens after the Job
+	// completes: if that one attempt fails (or the reconciler was down at the
+	// moment), a row stuck at succeeded must be retried rather than forgotten.
+	err := model.DB.Where("phase IN ?", []string{model.WorkspaceCreating, model.WorkspaceRunning, model.WorkspaceStopped, model.WorkspaceMerging, model.WorkspaceSucceeded}).
 		Find(&rows).Error
 	if err != nil {
 		return
@@ -345,6 +352,7 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 			continue
 		}
 		state := kube.NotebookStateOf(env)
+		state.Endpoint = publicEndpoint(state.Endpoint, s.cfg.StudioNotebookBaseURL)
 		phase, reason := derivePhase(state)
 		if phase == row.Phase && reason == row.Reason && state.Endpoint == row.Endpoint {
 			continue
@@ -384,6 +392,32 @@ func (s *WorkspaceService) owned(ownerID, id int64) (*model.Workspace, *common.A
 	return &row, nil
 }
 
+// publicEndpoint keeps the path the operator published and swaps its scheme
+// and host for the public base. The operator reports the address it listens on
+// (http://<node-ip>/dev/<ns>/<name>/), which is not where users reach it.
+func publicEndpoint(endpoint, base string) string {
+	if endpoint == "" || base == "" {
+		return endpoint
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path == "" {
+		return endpoint
+	}
+	path := parsed.EscapedPath()
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if parsed.RawQuery != "" {
+		path += "?" + parsed.RawQuery
+	}
+	return strings.TrimRight(base, "/") + path
+}
+
+// notebookHome is where the jupyter image's server is rooted: JupyterLab's
+// file browser cannot navigate above it, so a dataset mounted at /data is
+// readable from code but invisible in the UI. Mount datasets below it instead.
+const notebookHome = "/home/jovyan"
+
 // notebookPlan is the automatic resource choice: size tiers by dataset size,
 // a fixed image, and the dataset PVC mounted read-only.
 func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (MatchedResources, map[string]any) {
@@ -391,14 +425,13 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 	if s.datasetSz != nil {
 		sizeLabel, _ = s.datasetSz(ctx, dataset)
 	}
-	cpu, memory, storage := notebookTier(sizeLabel)
+	cpu, memory := notebookTier(sizeLabel)
 	volume := fmt.Sprintf(s.cfg.StudioDatasetPVCPattern, dataset)
 
 	matched := MatchedResources{
 		Image:       s.cfg.StudioNotebookImage,
 		CPU:         cpu,
 		Memory:      memory,
-		Storage:     storage,
 		Volume:      volume,
 		DatasetSize: sizeLabel,
 		IdleTimeout: 7200,
@@ -411,19 +444,12 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 			"cpu":    cpu,
 			"memory": memory,
 		},
-		"storage": map[string]any{
-			"size":         storage,
-			"mountPath":    "/home/ubuntu",
-			"pvcRetention": "retain",
-		},
-		"ports": []any{
-			map[string]any{"name": "jupyter", "containerPort": 8888, "type": "http"},
-		},
 		"lifecycle": map[string]any{"idleTimeout": matched.IdleTimeout},
+		"network":   map[string]any{"egress": map[string]any{"unrestricted": s.cfg.StudioNotebookEgress}},
 		"volumes": []any{
 			map[string]any{
 				"name":      "dataset",
-				"mountPath": "/data/" + dataset,
+				"mountPath": notebookHome + "/data/" + dataset,
 				"pvcName":   volume,
 				"readOnly":  true,
 			},
@@ -433,17 +459,19 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 }
 
 // notebookTier maps a declared dataset size onto a size tier. Unknown sizes
-// take the middle tier rather than failing the launch.
-func notebookTier(sizeLabel string) (cpu, memory, storage string) {
+// take the small tier rather than failing the launch. The request must fit one
+// node's allocatable memory: the first version asked for 32Gi on a node that
+// has 30.5Gi, which never schedules no matter how idle the cluster is.
+func notebookTier(sizeLabel string) (cpu, memory string) {
 	const gi = int64(1) << 30
 	bytes, ok := parseByteSize(sizeLabel)
 	switch {
 	case !ok || bytes < 10*gi:
-		return "8", "32Gi", "50Gi"
+		return "4", "8Gi"
 	case bytes < 100*gi:
-		return "16", "64Gi", "100Gi"
+		return "8", "16Gi"
 	default:
-		return "32", "128Gi", "200Gi"
+		return "12", "24Gi"
 	}
 }
 
