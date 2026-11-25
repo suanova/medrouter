@@ -184,11 +184,17 @@ func (s *WorkspaceService) inferenceState(ctx context.Context, row model.Workspa
 		return "", "", "", false
 	}
 	endpoint = kube.InferenceServiceEndpoint(service)
-	if kube.InferenceServiceReady(service) {
+	status, statusReason := kube.InferenceServiceState(service)
+	switch status {
+	case "Ready":
 		return model.WorkspaceRunning, "", endpoint, true
-	}
-	if reason := kube.InferenceServiceReason(service); reason != "" {
-		return model.WorkspaceFailed, reason, endpoint, true
+	case "Failed":
+		return model.WorkspaceFailed, statusReason, endpoint, true
+	case "":
+		// No phase yet: fall back to what the service reports about itself.
+		if kube.InferenceServiceReady(service) {
+			return model.WorkspaceRunning, "", endpoint, true
+		}
 	}
 	return model.WorkspaceCreating, "", endpoint, true
 }

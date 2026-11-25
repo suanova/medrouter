@@ -15,15 +15,23 @@ const (
 
 // InferenceService decodes the status the studio projects.
 type InferenceService struct {
-	Metadata ObjectMeta              `json:"metadata"`
-	Status   InferenceServiceStatus  `json:"status"`
+	Metadata ObjectMeta             `json:"metadata"`
+	Status   InferenceServiceStatus `json:"status"`
 }
 
 type InferenceServiceStatus struct {
-	Conditions []Condition `json:"conditions"`
+	// Phase is the operator's own one-word summary: Pending, Progressing,
+	// Ready or Failed. It is absent until the first verdict.
+	Phase      *InferenceServicePhase `json:"phase,omitempty"`
+	Conditions []Condition            `json:"conditions"`
 	// Endpoints is intentionally free-form: the operator has changed its shape
 	// once already, and the studio only needs an address when one is present.
 	Endpoints []map[string]any `json:"endpoints"`
+}
+
+type InferenceServicePhase struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
 }
 
 // CreateInferenceService posts one service spec into a namespace.
@@ -87,6 +95,18 @@ func (c *Client) ModelVersionExists(ctx context.Context, name string) (bool, err
 	return true, nil
 }
 
+// InferenceServiceState returns the operator's phase and its reason. The
+// conditions are a set of independent facts, several of them False when all is
+// well (Customized, ProfileDrifted, ProfileDeprecated); reading them for a
+// failure reports healthy services as broken. The phase is the operator's own
+// summary of the same conditions.
+func InferenceServiceState(service InferenceService) (name, reason string) {
+	if service.Status.Phase == nil {
+		return "", ""
+	}
+	return service.Status.Phase.Name, service.Status.Phase.Reason
+}
+
 // InferenceServiceReady reports whether the service has a Ready condition.
 func InferenceServiceReady(service InferenceService) bool {
 	for _, condition := range service.Status.Conditions {
@@ -95,16 +115,6 @@ func InferenceServiceReady(service InferenceService) bool {
 		}
 	}
 	return false
-}
-
-// InferenceServiceReason returns the first non-True condition reason, if any.
-func InferenceServiceReason(service InferenceService) string {
-	for _, condition := range service.Status.Conditions {
-		if condition.Status != "True" && condition.Reason != "" {
-			return condition.Reason
-		}
-	}
-	return ""
 }
 
 // InferenceServiceEndpoint returns the first endpoint address the operator

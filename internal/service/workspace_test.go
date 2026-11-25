@@ -22,6 +22,8 @@ type fakeNotebooks struct {
 	running                 []bool
 	jobPhase                string
 	inferenceReady          bool
+	inferencePhase          string
+	inferenceReason         string
 	modelVersions           []string
 	modelVersionSpecs       []map[string]any
 	modelVersionAnnotations []map[string]string
@@ -132,6 +134,9 @@ func (f *fakeNotebooks) GetInferenceService(_ context.Context, _, _ string) (kub
 	service := kube.InferenceService{}
 	if f.inferenceReady {
 		service.Status.Conditions = []kube.Condition{{Type: "Ready", Status: "True"}}
+	}
+	if f.inferencePhase != "" {
+		service.Status.Phase = &kube.InferenceServicePhase{Name: f.inferencePhase, Reason: f.inferenceReason}
 	}
 	return service, f.found, f.err
 }
@@ -1018,5 +1023,46 @@ func TestWorkspaceDeployChosenVersion(t *testing.T) {
 	svc3 := NewWorkspaceService(studioConfig(false), &fakeNotebooks{}, nil).WithDeployment(versions, runtimeProfiles)
 	if _, apiErr := svc3.CreateVersion(context.Background(), 3, FavoriteModel, "biomistral-7b", "", "lavamed-7b-bf16"); apiErr == nil || apiErr.Code != "VERSION_MISMATCH" {
 		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
+
+func TestWorkspaceInferenceUsesOperatorPhase(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(deployableModel, runtimeProfiles)
+
+	if _, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", ""); apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	cluster.found = true
+
+	// A rolling-out service reports several False conditions that mean nothing
+	// is wrong (Customized, ProfileDrifted, ProfileDeprecated). The phase is
+	// what says it is progressing, so the workspace must stay "creating".
+	cluster.inferencePhase = "Progressing"
+	cluster.inferenceReason = "Reconciling"
+	svc.Reconcile(context.Background())
+	list, _ := svc.List(1)
+	if list[0].Phase != model.WorkspaceCreating || list[0].Reason != "" {
+		t.Fatalf("progressing workspace = %+v", list[0])
+	}
+
+	cluster.inferencePhase = "Ready"
+	cluster.inferenceReason = ""
+	svc.Reconcile(context.Background())
+	list, _ = svc.List(1)
+	if list[0].Phase != model.WorkspaceRunning {
+		t.Fatalf("ready workspace = %+v", list[0])
+	}
+
+	cluster.inferencePhase = "Failed"
+	cluster.inferenceReason = "ModelStorageIncompatible"
+	svc.Reconcile(context.Background())
+	list, _ = svc.List(1)
+	if list[0].Phase != model.WorkspaceFailed || list[0].Reason != "ModelStorageIncompatible" {
+		t.Fatalf("failed workspace = %+v", list[0])
 	}
 }
