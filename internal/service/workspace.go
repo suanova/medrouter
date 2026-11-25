@@ -154,8 +154,20 @@ func (s *WorkspaceService) Create(ctx context.Context, ownerID int64, sourceKind
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read the favorite")
 	}
 
+	// A model can be launched more than once on purpose: fine-tuning it and
+	// deploying it are two workspaces. The idempotency key is therefore the
+	// workspace kind the request asks for, not just the source — otherwise a
+	// deploy returns the fine-tune that is already running and creates nothing.
+	kind := WorkspaceNotebook
+	if sourceKind == FavoriteModel {
+		if strings.TrimSpace(datasetName) == "" {
+			kind = WorkspaceInference
+		} else {
+			kind = WorkspaceFinetune
+		}
+	}
 	var existing model.Workspace
-	err = model.DB.Where("owner_id = ? AND source_kind = ? AND source_name = ?", ownerID, sourceKind, sourceName).
+	err = model.DB.Where("owner_id = ? AND kind = ? AND source_kind = ? AND source_name = ?", ownerID, kind, sourceKind, sourceName).
 		First(&existing).Error
 	if err == nil {
 		dto := toWorkspaceDTO(existing)

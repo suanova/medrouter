@@ -908,3 +908,45 @@ func TestWorkspaceFineTuneRetriesRegistrationOnceBaseResolves(t *testing.T) {
 		t.Fatalf("model versions = %+v", cluster.modelVersions)
 	}
 }
+
+func TestWorkspaceDeployAfterFineTuneCreatesInference(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	finetune, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create finetune: %v", apiErr)
+	}
+
+	// Deploying the same model must not return the fine-tune: they are two
+	// workspaces, and the launch that asks for a deployment has to create one.
+	deploy, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create inference: %v", apiErr)
+	}
+	if deploy.ID == finetune.ID || deploy.Kind != WorkspaceInference {
+		t.Fatalf("deploy = %+v, finetune = %+v", deploy, finetune)
+	}
+	if len(cluster.created) != 2 || cluster.created[1][2] != "inference" {
+		t.Fatalf("cluster calls = %+v", cluster.created)
+	}
+
+	// Asking again is still idempotent for that kind.
+	again, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil || again.ID != deploy.ID {
+		t.Fatalf("idempotent deploy = %+v / %v", again, apiErr)
+	}
+}
