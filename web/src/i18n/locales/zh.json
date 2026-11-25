@@ -609,7 +609,6 @@
       },
       "deploy": "一键部署",
       "start": "启动开发环境",
-      "starting": "正在启动…",
       "matching": "正在为 {{name}} 匹配算力…",
       "autoMatchInference": "运行时、引擎与显卡自动匹配",
       "autoMatchNotebook": "规格、镜像与显卡自动匹配",
@@ -619,7 +618,8 @@
       "errorTitle": "收藏加载失败",
       "errorText": "请稍后重试。",
       "retry": "重试",
-      "finetune": "微调"
+      "finetune": "微调",
+      "deploying": "部署中…"
     },
     "workspace": {
       "title": "工作台",

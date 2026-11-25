@@ -299,9 +299,9 @@ function FavoriteCard({
   const isModel = favorite.kind === 'model'
   const Icon = isModel ? Server : BookOpen
   const workspace = inference ?? finetune
-  const creating = inference
-    ? inference.phase === 'creating'
-    : finetune?.phase === 'creating' || finetune?.phase === 'running'
+  // The deploy button follows the deployment only; a running fine-tune must not
+  // disable it.
+  const deploying = inference?.phase === 'creating'
   const running = inference?.phase === 'running'
 
   return (
@@ -357,16 +357,16 @@ function FavoriteCard({
           <button
             type='button'
             className='ml-btn ml-btn-primary st-fav-btn'
-            disabled={pending || creating}
+            disabled={pending || deploying}
             onClick={onLaunch}
           >
-            {pending || creating ? (
+            {pending || deploying ? (
               <Loader2 className='st-spin' aria-hidden='true' />
             ) : (
               <Play aria-hidden='true' />
             )}
-            {creating
-              ? t('studio.favorites.starting')
+            {deploying
+              ? t('studio.favorites.deploying')
               : isModel
                 ? t('studio.favorites.deploy')
                 : t('studio.favorites.start')}

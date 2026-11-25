@@ -391,14 +391,13 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 	if s.datasetSz != nil {
 		sizeLabel, _ = s.datasetSz(ctx, dataset)
 	}
-	cpu, memory, storage := notebookTier(sizeLabel)
+	cpu, memory := notebookTier(sizeLabel)
 	volume := fmt.Sprintf(s.cfg.StudioDatasetPVCPattern, dataset)
 
 	matched := MatchedResources{
 		Image:       s.cfg.StudioNotebookImage,
 		CPU:         cpu,
 		Memory:      memory,
-		Storage:     storage,
 		Volume:      volume,
 		DatasetSize: sizeLabel,
 		IdleTimeout: 7200,
@@ -410,14 +409,6 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 		"resources": map[string]any{
 			"cpu":    cpu,
 			"memory": memory,
-		},
-		"storage": map[string]any{
-			"size":         storage,
-			"mountPath":    "/home/ubuntu",
-			"pvcRetention": "retain",
-		},
-		"ports": []any{
-			map[string]any{"name": "jupyter", "containerPort": 8888, "type": "http"},
 		},
 		"lifecycle": map[string]any{"idleTimeout": matched.IdleTimeout},
 		"volumes": []any{
@@ -433,17 +424,19 @@ func (s *WorkspaceService) notebookPlan(ctx context.Context, dataset string) (Ma
 }
 
 // notebookTier maps a declared dataset size onto a size tier. Unknown sizes
-// take the middle tier rather than failing the launch.
-func notebookTier(sizeLabel string) (cpu, memory, storage string) {
+// take the small tier rather than failing the launch. The request must fit one
+// node's allocatable memory: the first version asked for 32Gi on a node that
+// has 30.5Gi, which never schedules no matter how idle the cluster is.
+func notebookTier(sizeLabel string) (cpu, memory string) {
 	const gi = int64(1) << 30
 	bytes, ok := parseByteSize(sizeLabel)
 	switch {
 	case !ok || bytes < 10*gi:
-		return "8", "32Gi", "50Gi"
+		return "4", "8Gi"
 	case bytes < 100*gi:
-		return "16", "64Gi", "100Gi"
+		return "8", "16Gi"
 	default:
-		return "32", "128Gi", "200Gi"
+		return "12", "24Gi"
 	}
 }
 

@@ -183,7 +183,7 @@ func TestWorkspaceDryRunReturnsPlan(t *testing.T) {
 	if !plan.DryRun || plan.Phase != WorkspacePlanned {
 		t.Fatalf("plan = %+v", plan)
 	}
-	if plan.Matched.CPU != "8" || plan.Matched.Memory != "32Gi" {
+	if plan.Matched.CPU != "4" || plan.Matched.Memory != "8Gi" {
 		t.Fatalf("matched = %+v", plan.Matched)
 	}
 	if plan.Matched.Volume != "pubmedqa-data" || plan.Matched.DatasetSize != "287Mi" {
@@ -200,16 +200,16 @@ func TestWorkspaceDryRunReturnsPlan(t *testing.T) {
 
 func TestWorkspaceSizeTiers(t *testing.T) {
 	cases := []struct{ size, cpu, memory string }{
-		{"287Mi", "8", "32Gi"},
-		{"9Gi", "8", "32Gi"},
-		{"10Gi", "16", "64Gi"},
-		{"99Gi", "16", "64Gi"},
-		{"100Gi", "32", "128Gi"},
-		{"2Ti", "32", "128Gi"},
-		{"unknown", "8", "32Gi"},
+		{"287Mi", "4", "8Gi"},
+		{"9Gi", "4", "8Gi"},
+		{"10Gi", "8", "16Gi"},
+		{"99Gi", "8", "16Gi"},
+		{"100Gi", "12", "24Gi"},
+		{"2Ti", "12", "24Gi"},
+		{"unknown", "4", "8Gi"},
 	}
 	for _, tc := range cases {
-		cpu, memory, _ := notebookTier(tc.size)
+		cpu, memory := notebookTier(tc.size)
 		if cpu != tc.cpu || memory != tc.memory {
 			t.Fatalf("%s -> %s/%s, want %s/%s", tc.size, cpu, memory, tc.cpu, tc.memory)
 		}
