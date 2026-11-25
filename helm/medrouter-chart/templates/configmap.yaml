@@ -66,7 +66,6 @@ data:
   STUDIO_DRY_RUN: {{ .Values.studio.dryRun | quote }}
   STUDIO_NAMESPACE: {{ .Values.studio.namespace | quote }}
   STUDIO_NOTEBOOK_IMAGE: {{ .Values.studio.notebookImage | quote }}
-  STUDIO_NOTEBOOK_BASE_URL: {{ .Values.studio.notebookBaseUrl | quote }}
   STUDIO_NOTEBOOK_EGRESS: {{ .Values.studio.notebookEgress | quote }}
   STUDIO_DATASET_PVC_PATTERN: {{ .Values.studio.datasetPVCPattern | quote }}
   STUDIO_MAX_WORKSPACES: {{ .Values.studio.maxWorkspaces | quote }}

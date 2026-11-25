@@ -287,7 +287,6 @@ func Load() (*Config, error) {
 		StudioDryRun:             boolEnv("STUDIO_DRY_RUN", true),
 		StudioNamespace:          getenv("STUDIO_NAMESPACE", "medrouter-workspace"),
 		StudioNotebookImage:      getenv("STUDIO_NOTEBOOK_IMAGE", "harbor.isuanova.com/suanova/jupyter-minimal:latest"),
-		StudioNotebookBaseURL:    strings.TrimRight(getenv("STUDIO_NOTEBOOK_BASE_URL", ""), "/"),
 		StudioNotebookEgress:     boolEnv("STUDIO_NOTEBOOK_EGRESS", true),
 		StudioDatasetPVCPattern:  getenv("STUDIO_DATASET_PVC_PATTERN", "%s-data"),
 		StudioMaxWorkspaces:      intEnv("STUDIO_MAX_WORKSPACES", 3),

@@ -352,7 +352,7 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 			continue
 		}
 		state := kube.NotebookStateOf(env)
-		state.Endpoint = publicEndpoint(state.Endpoint, s.cfg.StudioNotebookBaseURL)
+		state.Endpoint = publicEndpoint(state.Endpoint, s.cfg.PublicOrigin)
 		phase, reason := derivePhase(state)
 		if phase == row.Phase && reason == row.Reason && state.Endpoint == row.Endpoint {
 			continue

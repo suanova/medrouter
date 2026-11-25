@@ -788,7 +788,7 @@ func TestNotebookSessionUsesPublicEndpoint(t *testing.T) {
 	starDataset(t, 7, "medmcqa")
 	cluster := &fakeNotebooks{}
 	cfg := studioConfig(false)
-	cfg.StudioNotebookBaseURL = "https://www.medrouter.com:8443"
+	cfg.PublicOrigin = "https://www.medrouter.com:8443"
 	svc := NewWorkspaceService(cfg, cluster, nil)
 
 	workspace, apiErr := svc.Create(context.Background(), 7, FavoriteDataset, "medmcqa", "")
@@ -810,9 +810,10 @@ func TestNotebookSessionUsesPublicEndpoint(t *testing.T) {
 	if session.URL != wantPublic {
 		t.Fatalf("url = %q, want %q", session.URL, wantPublic)
 	}
-	wantUpstream := "http://106.75.251.248/dev/medrouter-workspace/" + workspace.Name + "/lab"
-	if session.Upstream != wantUpstream {
-		t.Fatalf("upstream = %q, want %q", session.Upstream, wantUpstream)
+	// The login must address the same host as the browser, because Jupyter
+	// names its identity cookie after the Host it was asked with.
+	if session.Upstream != wantPublic {
+		t.Fatalf("upstream = %q, want %q", session.Upstream, wantPublic)
 	}
 	if session.Token != "server-token" {
 		t.Fatalf("token = %q", session.Token)

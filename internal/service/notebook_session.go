@@ -16,9 +16,10 @@ import (
 type NotebookSession struct {
 	// URL is where the browser navigates: the public endpoint's lab page.
 	URL string
-	// Upstream is the operator's own address for the same page. The server
-	// calls it to mint the identity cookie, because that is the address the
-	// cookie is named after.
+	// Upstream is the address the server calls to mint the identity cookie.
+	// It is the same URL the browser opens, deliberately: Jupyter names its
+	// cookie `username-<Host>`, so a login made against another host would set
+	// a cookie the browser's own request never matches.
 	Upstream string
 	// Token is the Jupyter server token. It travels in a header only and is
 	// never put in a URL, so nothing logs or stores it.
@@ -70,18 +71,15 @@ func (s *WorkspaceService) NotebookSession(ctx context.Context, ownerID, id int6
 			"The notebook's login token could not be read")
 	}
 
-	upstream, err := labURL(state.Endpoint)
-	if err != nil {
-		return NotebookSession{}, common.NewAPIErrorStatus(http.StatusBadGateway, "NOTEBOOK_UNREACHABLE",
-			"The notebook endpoint is not a URL")
-	}
-	published := publicEndpoint(state.Endpoint, s.cfg.StudioNotebookBaseURL)
+	published := publicEndpoint(state.Endpoint, s.cfg.PublicOrigin)
 	public, err := labURL(published)
 	if err != nil {
 		return NotebookSession{}, common.NewAPIErrorStatus(http.StatusBadGateway, "NOTEBOOK_UNREACHABLE",
 			"The notebook endpoint is not a URL")
 	}
-	return NotebookSession{URL: public, Upstream: upstream, Token: token}, nil
+	// The login is made against the browser's URL, not the operator's, so the
+	// identity cookie is minted for the host the browser will send it to.
+	return NotebookSession{URL: public, Upstream: public, Token: token}, nil
 }
 
 // labURL is the JupyterLab page under an environment endpoint. The operator
