@@ -49,6 +49,7 @@ type WorkspaceCluster interface {
 
 	CreateModelVersion(ctx context.Context, name string, labels, annotations map[string]string, spec map[string]any) error
 	ModelVersionExists(ctx context.Context, name string) (bool, error)
+	GetModelVersion(ctx context.Context, name string) (kube.ModelVersion, bool, error)
 }
 
 // DatasetSizeFunc reports a dataset's declared size, for example "287Mi". The

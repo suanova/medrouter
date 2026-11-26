@@ -27,6 +27,8 @@ type fakeNotebooks struct {
 	modelVersions           []string
 	modelVersionSpecs       []map[string]any
 	modelVersionAnnotations []map[string]string
+	// baseModelVersion is what GetModelVersion returns; nil means not found.
+	baseModelVersion *kube.ModelVersion
 	// jobStates is per-job-name; when nil the fake falls back to (found, jobPhase).
 	jobStates map[string]string
 	// jupyterSecret is the token Secret the fake environment's status names;
@@ -155,6 +157,16 @@ func (f *fakeNotebooks) CreateModelVersion(_ context.Context, name string, _ map
 
 func (f *fakeNotebooks) ModelVersionExists(context.Context, string) (bool, error) {
 	return false, f.err
+}
+
+func (f *fakeNotebooks) GetModelVersion(_ context.Context, name string) (kube.ModelVersion, bool, error) {
+	if f.err != nil {
+		return kube.ModelVersion{}, false, f.err
+	}
+	if f.baseModelVersion != nil && f.baseModelVersion.Metadata.Name == name {
+		return *f.baseModelVersion, true, nil
+	}
+	return kube.ModelVersion{}, false, nil
 }
 
 func studioConfig(dryRun bool) *config.Config {
@@ -645,14 +657,23 @@ func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
 	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
 		t.Fatalf("star: %v", apiErr)
 	}
-	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+	base := modelVersion("biomistral-7b", "mistral", map[string]string{
 		metaFinetune: "lora", metaTasks: "text-qa",
-	})}
-	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	})
+	base.Metadata.Name = "biomistral-7b-bf16"
+	base.Metadata.Annotations = map[string]string{
+		"ai.cubestack.io/publisher":   "BioMistral",
+		"ai.cubestack.io/description": "Bio-Mistral-7B base description",
+		"medrouter.io/display-name":   "Bio-Mistral-7B",
+		"medrouter.io/task":           "文本生成",
+		"medrouter.io/usage-boundary": "研究用途",
+		"medrouter.io/lora-adapter":   "must-not-win",
+	}
+	mvs := []kube.ModelVersion{base}
 	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
 	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
 
-	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	cluster := &fakeNotebooks{jobStates: map[string]string{}, baseModelVersion: &base}
 	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
 		WithFineTune(lookup, finetuneService(mvs, datasets)).
 		WithDeployment(deployableModel, runtimeProfiles)
@@ -684,6 +705,20 @@ func TestWorkspaceFineTuneRegistersModelVersion(t *testing.T) {
 	}
 	if cluster.modelVersionAnnotations[0]["medrouter.io/lora-adapter"] != ".adapters/"+workspace.Name {
 		t.Fatalf("annotations = %+v", cluster.modelVersionAnnotations[0])
+	}
+	// The catalog card is built from the newest version's annotations, so the
+	// adapter must inherit the base version's catalog/display facts.
+	annotations := cluster.modelVersionAnnotations[0]
+	for key, want := range map[string]string{
+		"ai.cubestack.io/publisher":   "BioMistral",
+		"ai.cubestack.io/description": "Bio-Mistral-7B base description",
+		"medrouter.io/display-name":   "Bio-Mistral-7B",
+		"medrouter.io/task":           "文本生成",
+		"medrouter.io/usage-boundary": "研究用途",
+	} {
+		if annotations[key] != want {
+			t.Fatalf("annotation %s = %q, want %q (%+v)", key, annotations[key], want, annotations)
+		}
 	}
 	if cluster.modelVersionSpecs[0]["storage"].(map[string]any)["hostPath"].(map[string]any)["path"] != "/mnt/cephfs/models/BioMistral-7B" {
 		t.Fatalf("storage = %+v", cluster.modelVersionSpecs[0]["storage"])
