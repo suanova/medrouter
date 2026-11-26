@@ -22,6 +22,8 @@ type fakeNotebooks struct {
 	running                 []bool
 	jobPhase                string
 	inferenceReady          bool
+	inferencePhase          string
+	inferenceReason         string
 	modelVersions           []string
 	modelVersionSpecs       []map[string]any
 	modelVersionAnnotations []map[string]string
@@ -132,6 +134,9 @@ func (f *fakeNotebooks) GetInferenceService(_ context.Context, _, _ string) (kub
 	service := kube.InferenceService{}
 	if f.inferenceReady {
 		service.Status.Conditions = []kube.Condition{{Type: "Ready", Status: "True"}}
+	}
+	if f.inferencePhase != "" {
+		service.Status.Phase = &kube.InferenceServicePhase{Name: f.inferencePhase, Reason: f.inferenceReason}
 	}
 	return service, f.found, f.err
 }
@@ -906,5 +911,158 @@ func TestWorkspaceFineTuneRetriesRegistrationOnceBaseResolves(t *testing.T) {
 	}
 	if len(cluster.modelVersions) != 1 || cluster.modelVersions[0] != workspace.Name {
 		t.Fatalf("model versions = %+v", cluster.modelVersions)
+	}
+}
+
+func TestWorkspaceDeployAfterFineTuneCreatesInference(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	mvs := []kube.ModelVersion{modelVersion("biomistral-7b", "mistral", map[string]string{
+		metaFinetune: "lora", metaTasks: "text-qa",
+	})}
+	mvs[0].Metadata.Name = "biomistral-7b-bf16"
+	datasets := []kube.Dataset{dataset("medmcqa", "Parquet", TaskTextQA)}
+	lookup := func(context.Context, string) (kube.ModelStorage, bool) { return hostPathStorage(), true }
+
+	cluster := &fakeNotebooks{jobStates: map[string]string{}}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).
+		WithFineTune(lookup, finetuneService(mvs, datasets)).
+		WithDeployment(deployableModel, runtimeProfiles)
+
+	finetune, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "medmcqa")
+	if apiErr != nil {
+		t.Fatalf("Create finetune: %v", apiErr)
+	}
+
+	// Deploying the same model must not return the fine-tune: they are two
+	// workspaces, and the launch that asks for a deployment has to create one.
+	deploy, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil {
+		t.Fatalf("Create inference: %v", apiErr)
+	}
+	if deploy.ID == finetune.ID || deploy.Kind != WorkspaceInference {
+		t.Fatalf("deploy = %+v, finetune = %+v", deploy, finetune)
+	}
+	if len(cluster.created) != 2 || cluster.created[1][2] != "inference" {
+		t.Fatalf("cluster calls = %+v", cluster.created)
+	}
+
+	// Asking again is still idempotent for that kind.
+	again, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
+	if apiErr != nil || again.ID != deploy.ID {
+		t.Fatalf("idempotent deploy = %+v / %v", again, apiErr)
+	}
+}
+
+func TestWorkspaceDeployChosenVersion(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	versions := func(_ context.Context, ref string) (ModelArtifact, bool) {
+		switch ref {
+		case "biomistral-7b":
+			return ModelArtifact{
+				Name: "biomistral-7b-medmcqa-u1-lora", Model: "biomistral-7b",
+				Architecture: "mistral", Quantization: "bf16", Storage: hostPathStorage(),
+				Adapter: ".adapters/biomistral-7b-medmcqa-u1-lora",
+			}, true
+		case "biomistral-7b-bf16":
+			return ModelArtifact{
+				Name: "biomistral-7b-bf16", Model: "biomistral-7b",
+				Architecture: "mistral", Quantization: "bf16", Storage: hostPathStorage(),
+			}, true
+		case "lavamed-7b-bf16":
+			return ModelArtifact{
+				Name: "lavamed-7b-bf16", Model: "lavamed-7b",
+				Architecture: "llava-1.5", Quantization: "bf16", Storage: hostPathStorage(),
+			}, true
+		}
+		return ModelArtifact{}, false
+	}
+
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(versions, runtimeProfiles)
+
+	// Deploy the base version explicitly, even though a newer (fine-tuned) one
+	// would be picked by default.
+	workspace, apiErr := svc.CreateVersion(context.Background(), 1, FavoriteModel, "biomistral-7b", "", "biomistral-7b-bf16")
+	if apiErr != nil {
+		t.Fatalf("CreateVersion: %v", apiErr)
+	}
+	spec := cluster.specs[0]
+	if spec["modelRef"] != "biomistral-7b-bf16" {
+		t.Fatalf("modelRef = %v", spec["modelRef"])
+	}
+	if overrides, _ := spec["overrides"].(map[string]any); len(overrides) != 0 {
+		t.Fatalf("the base version must not carry a lora override: %+v", overrides)
+	}
+	if workspace.Matched.ModelVersion != "biomistral-7b-bf16" {
+		t.Fatalf("matched = %+v", workspace.Matched)
+	}
+
+	// Deploying the newest version (no explicit ref) picks the adapter.
+	other := &fakeNotebooks{}
+	svc2 := NewWorkspaceService(studioConfig(false), other, nil).WithDeployment(versions, runtimeProfiles)
+	if _, apiErr := NewFavoriteService().Add(2, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	if _, apiErr := svc2.CreateVersion(context.Background(), 2, FavoriteModel, "biomistral-7b", "", ""); apiErr != nil {
+		t.Fatalf("CreateVersion: %v", apiErr)
+	}
+	if other.specs[0]["modelRef"] != "biomistral-7b-medmcqa-u1-lora" {
+		t.Fatalf("modelRef = %v", other.specs[0]["modelRef"])
+	}
+
+	// A version of another model is refused.
+	if _, apiErr := NewFavoriteService().Add(3, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	svc3 := NewWorkspaceService(studioConfig(false), &fakeNotebooks{}, nil).WithDeployment(versions, runtimeProfiles)
+	if _, apiErr := svc3.CreateVersion(context.Background(), 3, FavoriteModel, "biomistral-7b", "", "lavamed-7b-bf16"); apiErr == nil || apiErr.Code != "VERSION_MISMATCH" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
+
+func TestWorkspaceInferenceUsesOperatorPhase(t *testing.T) {
+	favoriteTestDB(t)
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star: %v", apiErr)
+	}
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil).WithDeployment(deployableModel, runtimeProfiles)
+
+	if _, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", ""); apiErr != nil {
+		t.Fatalf("Create: %v", apiErr)
+	}
+	cluster.found = true
+
+	// A rolling-out service reports several False conditions that mean nothing
+	// is wrong (Customized, ProfileDrifted, ProfileDeprecated). The phase is
+	// what says it is progressing, so the workspace must stay "creating".
+	cluster.inferencePhase = "Progressing"
+	cluster.inferenceReason = "Reconciling"
+	svc.Reconcile(context.Background())
+	list, _ := svc.List(1)
+	if list[0].Phase != model.WorkspaceCreating || list[0].Reason != "" {
+		t.Fatalf("progressing workspace = %+v", list[0])
+	}
+
+	cluster.inferencePhase = "Ready"
+	cluster.inferenceReason = ""
+	svc.Reconcile(context.Background())
+	list, _ = svc.List(1)
+	if list[0].Phase != model.WorkspaceRunning {
+		t.Fatalf("ready workspace = %+v", list[0])
+	}
+
+	cluster.inferencePhase = "Failed"
+	cluster.inferenceReason = "ModelStorageIncompatible"
+	svc.Reconcile(context.Background())
+	list, _ = svc.List(1)
+	if list[0].Phase != model.WorkspaceFailed || list[0].Reason != "ModelStorageIncompatible" {
+		t.Fatalf("failed workspace = %+v", list[0])
 	}
 }

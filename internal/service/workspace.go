@@ -132,6 +132,14 @@ var dnsNamePattern = regexp.MustCompile(`[^a-z0-9-]+`)
 // Create launches the environment for one star. It is idempotent per favorite:
 // an existing workspace is returned instead of creating a second one.
 func (s *WorkspaceService) Create(ctx context.Context, ownerID int64, sourceKind, sourceName, datasetName string) (*WorkspaceDTO, *common.APIError) {
+	return s.CreateVersion(ctx, ownerID, sourceKind, sourceName, datasetName, "")
+}
+
+// CreateVersion is Create with an explicit version to deploy. versionRef is a
+// ModelVersion name; empty means the model's newest version. It is ignored
+// outside deployment: a fine-tune and a notebook are about the model or the
+// dataset, not one version of it.
+func (s *WorkspaceService) CreateVersion(ctx context.Context, ownerID int64, sourceKind, sourceName, datasetName, versionRef string) (*WorkspaceDTO, *common.APIError) {
 	if !s.cfg.StudioEnabled {
 		return nil, common.NewAPIErrorStatus(http.StatusServiceUnavailable, "STUDIO_DISABLED",
 			"The studio is not enabled for this deployment")
@@ -154,8 +162,20 @@ func (s *WorkspaceService) Create(ctx context.Context, ownerID int64, sourceKind
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read the favorite")
 	}
 
+	// A model can be launched more than once on purpose: fine-tuning it and
+	// deploying it are two workspaces. The idempotency key is therefore the
+	// workspace kind the request asks for, not just the source — otherwise a
+	// deploy returns the fine-tune that is already running and creates nothing.
+	kind := WorkspaceNotebook
+	if sourceKind == FavoriteModel {
+		if strings.TrimSpace(datasetName) == "" {
+			kind = WorkspaceInference
+		} else {
+			kind = WorkspaceFinetune
+		}
+	}
 	var existing model.Workspace
-	err = model.DB.Where("owner_id = ? AND source_kind = ? AND source_name = ?", ownerID, sourceKind, sourceName).
+	err = model.DB.Where("owner_id = ? AND kind = ? AND source_kind = ? AND source_name = ?", ownerID, kind, sourceKind, sourceName).
 		First(&existing).Error
 	if err == nil {
 		dto := toWorkspaceDTO(existing)
@@ -167,7 +187,7 @@ func (s *WorkspaceService) Create(ctx context.Context, ownerID int64, sourceKind
 
 	if sourceKind == FavoriteModel {
 		if strings.TrimSpace(datasetName) == "" {
-			return s.createInference(ctx, ownerID, sourceName)
+			return s.createInference(ctx, ownerID, sourceName, versionRef)
 		}
 		return s.createFinetune(ctx, ownerID, sourceName, datasetName)
 	}

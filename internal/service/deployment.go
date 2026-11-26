@@ -77,14 +77,24 @@ func inferenceName(ref string, ownerID int64) string {
 
 // createInference deploys one model version behind the AI gateway. There is no
 // fine-tune dataset here: the entry point is "deploy this model".
-func (s *WorkspaceService) createInference(ctx context.Context, ownerID int64, ref string) (*WorkspaceDTO, *common.APIError) {
+func (s *WorkspaceService) createInference(ctx context.Context, ownerID int64, modelName, versionRef string) (*WorkspaceDTO, *common.APIError) {
 	if s.modelInfo == nil || s.profiles == nil {
 		return nil, common.NewAPIErrorStatus(http.StatusServiceUnavailable, "STUDIO_UNAVAILABLE",
 			"Deployment is not configured for this deployment")
 	}
+	ref := strings.TrimSpace(versionRef)
+	if ref == "" {
+		ref = modelName
+	}
 	artifact, ok := s.modelInfo(ctx, ref)
 	if !ok {
 		return nil, common.NewAPIErrorStatus(http.StatusNotFound, "MODEL_NOT_FOUND", "Model not found")
+	}
+	// A favorite is a model; the version may only narrow it, never switch to
+	// another model's version.
+	if artifact.Model != modelName {
+		return nil, common.NewAPIErrorStatus(http.StatusConflict, "VERSION_MISMATCH",
+			"That version belongs to a different model")
 	}
 	profile, ok := matchProfile(s.profiles(ctx), artifact.Architecture, artifact.Quantization)
 	if !ok {
@@ -174,11 +184,17 @@ func (s *WorkspaceService) inferenceState(ctx context.Context, row model.Workspa
 		return "", "", "", false
 	}
 	endpoint = kube.InferenceServiceEndpoint(service)
-	if kube.InferenceServiceReady(service) {
+	status, statusReason := kube.InferenceServiceState(service)
+	switch status {
+	case "Ready":
 		return model.WorkspaceRunning, "", endpoint, true
-	}
-	if reason := kube.InferenceServiceReason(service); reason != "" {
-		return model.WorkspaceFailed, reason, endpoint, true
+	case "Failed":
+		return model.WorkspaceFailed, statusReason, endpoint, true
+	case "":
+		// No phase yet: fall back to what the service reports about itself.
+		if kube.InferenceServiceReady(service) {
+			return model.WorkspaceRunning, "", endpoint, true
+		}
 	}
 	return model.WorkspaceCreating, "", endpoint, true
 }

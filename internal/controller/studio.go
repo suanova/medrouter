@@ -99,6 +99,8 @@ type workspaceRequest struct {
 	SourceName string `json:"source_name"`
 	// DatasetName is required when starting a fine-tune from a model favorite.
 	DatasetName string `json:"dataset_name"`
+	// Version is the ModelVersion to deploy; empty means the newest one.
+	Version string `json:"version"`
 }
 
 // ListWorkspaces returns the caller's launched workspaces.
@@ -127,7 +129,7 @@ func (h *StudioController) CreateWorkspace(c *gin.Context) {
 		common.Fail(c, common.NewAPIErrorStatus(http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body"))
 		return
 	}
-	workspace, apiErr := h.workspaces.Create(c.Request.Context(), *userID, req.SourceKind, req.SourceName, req.DatasetName)
+	workspace, apiErr := h.workspaces.CreateVersion(c.Request.Context(), *userID, req.SourceKind, req.SourceName, req.DatasetName, req.Version)
 	if apiErr != nil {
 		common.Fail(c, apiErr)
 		return

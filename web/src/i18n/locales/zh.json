@@ -619,7 +619,9 @@
       "errorText": "请稍后重试。",
       "retry": "重试",
       "finetune": "微调",
-      "deploying": "部署中…"
+      "deploying": "部署中…",
+      "version": "版本",
+      "latest": "最新"
     },
     "workspace": {
       "title": "工作台",
@@ -712,7 +714,8 @@
         "creating": "训练准备中",
         "running": "训练中",
         "succeeded": "已完成",
-        "failed": "训练失败"
+        "failed": "训练失败",
+        "ready": "已就绪"
       }
     }
   },
