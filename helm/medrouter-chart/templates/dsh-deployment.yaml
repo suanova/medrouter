@@ -111,7 +111,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"
+                - 'wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"'
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 60
@@ -120,7 +120,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"
+                - 'wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"'
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -129,7 +129,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"
+                - 'wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"'
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
