@@ -243,6 +243,38 @@ func adapterVersion(row model.Workspace) string {
 
 func modelVersionName(baseModel, version string) string { return baseModel + "-" + version }
 
+// inheritedModelVersionAnnotations are the catalog and display annotations a
+// fine-tune version inherits from its base ModelVersion. The fine-tune job keys
+// (base-modelversion, finetune-*, lora-adapter) are deliberately not listed:
+// registerModelVersion writes those from the current job.
+var inheritedModelVersionAnnotations = []string{
+	"ai.cubestack.io/departments",
+	"ai.cubestack.io/modalities",
+	"ai.cubestack.io/tasks",
+	"ai.cubestack.io/evidence",
+	"ai.cubestack.io/publisher",
+	"ai.cubestack.io/license",
+	"ai.cubestack.io/distribution",
+	"ai.cubestack.io/description",
+	"medrouter.io/display-name",
+	"medrouter.io/task",
+	"medrouter.io/usage-boundary",
+	"medrouter.io/tags",
+	"medrouter.io/featured",
+	"medrouter.io/publisher",
+	"medrouter.io/license",
+	"medrouter.io/finetune",
+	"medrouter.io/finetune-tasks",
+}
+
+func inheritModelVersionAnnotations(dst, src map[string]string) {
+	for _, key := range inheritedModelVersionAnnotations {
+		if value, ok := src[key]; ok {
+			dst[key] = value
+		}
+	}
+}
+
 // registerModelVersion makes the adapter discoverable and deployable. The base
 // family is preserved (same spec.model) so it appears as a version of the
 // original model; the storage stays the base directory and the annotation tells
@@ -259,12 +291,20 @@ func (s *WorkspaceService) registerModelVersion(ctx context.Context, row model.W
 	var matched MatchedResources
 	_ = json.Unmarshal([]byte(row.Matched), &matched)
 
-	annotations := map[string]string{
-		"medrouter.io/base-modelversion": artifact.Name,
-		"medrouter.io/finetune-method":   "lora",
-		"medrouter.io/finetune-job":      row.Name,
-		"medrouter.io/lora-adapter":      adapterSubdir(row.Name),
+	// The catalog card is built from the newest version's annotations, so a
+	// LoRA version that only carries fine-tune facts makes the whole model
+	// look unpublished. Inherit the base version's catalog/display
+	// annotations first; the fine-tune facts below always overwrite.
+	annotations := map[string]string{}
+	if base, ok, err := s.cluster.GetModelVersion(ctx, artifact.Name); err != nil {
+		return workspaceAPIError(err)
+	} else if ok {
+		inheritModelVersionAnnotations(annotations, base.Metadata.Annotations)
 	}
+	annotations["medrouter.io/base-modelversion"] = artifact.Name
+	annotations["medrouter.io/finetune-method"] = "lora"
+	annotations["medrouter.io/finetune-job"] = row.Name
+	annotations["medrouter.io/lora-adapter"] = adapterSubdir(row.Name)
 	if matched.Dataset != "" {
 		annotations["medrouter.io/finetune-dataset"] = matched.Dataset
 	}

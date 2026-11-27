@@ -95,6 +95,20 @@ func (c *Client) ModelVersionExists(ctx context.Context, name string) (bool, err
 	return true, nil
 }
 
+// GetModelVersion returns one ModelVersion. ok is false when it does not exist.
+func (c *Client) GetModelVersion(ctx context.Context, name string) (ModelVersion, bool, error) {
+	var out ModelVersion
+	err := c.send(ctx, http.MethodGet, modelVersionBase+"/"+name, "", nil, &out)
+	if err != nil {
+		var status *StatusError
+		if errors.As(err, &status) && status.Status == http.StatusNotFound {
+			return ModelVersion{}, false, nil
+		}
+		return ModelVersion{}, false, err
+	}
+	return out, true, nil
+}
+
 // InferenceServiceState returns the operator's phase and its reason. The
 // conditions are a set of independent facts, several of them False when all is
 // well (Customized, ProfileDrifted, ProfileDeprecated); reading them for a
