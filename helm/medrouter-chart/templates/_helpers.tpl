@@ -136,6 +136,14 @@ Secure cookies and plain-http local port-forwards remain usable.
 {{- end -}}
 
 {{/*
+API path: the app mounts the API at API_PREFIX + "/api".
+*/}}
+{{- define "medrouter.apiPath" -}}
+{{- $prefix := include "medrouter.apiPrefix" . -}}
+{{- if eq $prefix "/" -}}/api{{- else -}}{{ $prefix }}/api{{- end -}}
+{{- end -}}
+
+{{/*
 Ingress path and probe path (the Go app serves /healthz under BASE_PATH).
 */}}
 {{- define "medrouter.ingressPath" -}}
@@ -462,12 +470,6 @@ Render-time validation for the DSH runtime. Called from medrouter.validate.
 {{- end -}}
 {{- end -}}
 
-{{- if .Values.secret.create -}}
-{{- if not (trim (toString .Values.secrets.DSH_DEEPSEEK_API_KEY)) -}}
-{{- fail "dsh.enabled=true needs a model key: set secrets.DSH_DEEPSEEK_API_KEY, or set secret.create=false with an existing Secret that contains DSH_DEEPSEEK_API_KEY and DSH_API_KEY" -}}
-{{- end -}}
-{{- end -}}
-
 {{- $defaultTimeout := int (default 0 .Values.dsh.agent.defaultTimeoutSeconds) -}}
 {{- $maxTimeout := int (default 0 .Values.dsh.agent.maxTimeoutSeconds) -}}
 {{- if or (lt $defaultTimeout 1) (lt $maxTimeout $defaultTimeout) -}}
@@ -477,14 +479,21 @@ Render-time validation for the DSH runtime. Called from medrouter.validate.
 {{- fail "dsh.agent.maxConcurrent must be at least 1" -}}
 {{- end -}}
 
-{{- $models := default (list) .Values.dsh.llm.models -}}
-{{- if not $models -}}
-{{- fail "dsh.llm.models must list at least one model for the Chat page picker" -}}
+{{- $llmBase := trim (toString .Values.dsh.llm.baseURL) -}}
+{{- if not (or (hasPrefix "http://" $llmBase) (hasPrefix "https://" $llmBase)) -}}
+{{- fail "dsh.llm.baseURL must be an absolute http(s) URL of the AI gateway (for example http://cubestack-ai-private.envoy-gateway-system.svc.cluster.local/v1)" -}}
 {{- end -}}
-{{- range $model := $models -}}
-{{- if not (trim (toString $model.id)) -}}
-{{- fail "dsh.llm.models entries need a non-empty id" -}}
+{{- if lt (int (default 0 .Values.dsh.llm.contextWindow)) 1 -}}
+{{- fail "dsh.llm.contextWindow must be a positive integer" -}}
 {{- end -}}
+{{- if lt (int (default 0 .Values.dsh.llm.maxTokens)) 1 -}}
+{{- fail "dsh.llm.maxTokens must be a positive integer" -}}
+{{- end -}}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]*$" (trim (toString .Values.dsh.providerPrefix))) -}}
+{{- fail "dsh.providerPrefix must be a lowercase hyphenated identifier (for example mr-)" -}}
+{{- end -}}
+{{- if not (trim (toString (include "medrouter.serviceAccountName" .))) -}}
+{{- fail "dsh.enabled=true requires a service account to roll the dsh deployment when the model catalog changes; set serviceAccount.create=true or serviceAccount.name" -}}
 {{- end -}}
 
 {{- $port := int (toString .Values.dsh.service.port) -}}

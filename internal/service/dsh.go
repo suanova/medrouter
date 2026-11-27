@@ -140,6 +140,7 @@ type DshSubmitInput struct {
 	SessionID   string
 	Preset      string
 	Model       string
+	Provider    string
 	Attachments []DshAttachment
 }
 
@@ -191,6 +192,10 @@ func (c *DshClient) Submit(ctx context.Context, userID int64, input DshSubmitInp
 	// leaves a model-change notice in the transcript.
 	if input.Model != "" {
 		body["model"] = input.Model
+	}
+	// The pi-ai route name generated for the deployed inference service.
+	if input.Provider != "" {
+		body["provider"] = input.Provider
 	}
 	data, err := c.call(ctx, http.MethodPost, userID, dshTasksPath, body)
 	if err != nil {

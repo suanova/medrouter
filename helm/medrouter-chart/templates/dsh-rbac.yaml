@@ -1,0 +1,35 @@
+{{- if .Values.dsh.enabled }}
+# MedRouter rolls the dsh Deployment when the set of running inference
+# services changes; the runtime regenerates its model routes at startup.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "medrouter.fullname" . }}-dsh-catalog
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - {{ include "medrouter.dshName" . }}
+    verbs:
+      - get
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "medrouter.fullname" . }}-dsh-catalog
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "medrouter.fullname" . }}-dsh-catalog
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "medrouter.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

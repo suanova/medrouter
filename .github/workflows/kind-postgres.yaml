@@ -84,11 +84,15 @@ jobs:
 
           helm template medrouter helm/medrouter-chart \
             --set dsh.enabled=true \
-            --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
             --set dsh.image.tag=test > /tmp/dsh.yaml
           grep -q "name: medrouter-dsh$" /tmp/dsh.yaml
           grep -q 'DSH_ENABLED: "true"' /tmp/dsh.yaml
           grep -q "DSH_HEADLESS_HOST" /tmp/dsh.yaml
+          # The runtime builds its model routes from the deployed services.
+          grep -q "MEDROUTER_MODELS_URL" /tmp/dsh.yaml
+          grep -q "DSH_LLM_BASE_URL" /tmp/dsh.yaml
+          grep -q "kind: Role" /tmp/dsh.yaml
+          grep -q "medrouter-dsh-catalog" /tmp/dsh.yaml
           # Master-only placement and the shared RWX volume by default.
           grep -q "node-role.kubernetes.io/control-plane" /tmp/dsh.yaml
           grep -q "ReadWriteMany" /tmp/dsh.yaml
@@ -99,34 +103,35 @@ jobs:
           fi
 
           helm template medrouter helm/medrouter-chart \
-            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.enabled=true \
             --set dsh.autoscaling.enabled=true \
             --set dsh.autoscaling.minReplicas=2 \
             --set dsh.autoscaling.maxReplicas=3 > /tmp/dsh-hpa.yaml
           grep -q "kind: HorizontalPodAutoscaler" /tmp/dsh-hpa.yaml
           grep -q "kind: PodDisruptionBudget" /tmp/dsh-hpa.yaml
 
-          # The picker needs a catalog; a missing model key must fail at render time.
+          # The gateway URL and the catalog-roll service account are required.
           if helm template medrouter helm/medrouter-chart \
-            --set dsh.enabled=true >/dev/null 2>&1; then
-            echo "dsh.enabled=true without secrets.DSH_DEEPSEEK_API_KEY must fail"
+            --set dsh.enabled=true \
+            --set dsh.llm.baseURL=not-a-url >/dev/null 2>&1; then
+            echo "dsh.enabled=true with an invalid dsh.llm.baseURL must fail"
             exit 1
           fi
           if helm template medrouter helm/medrouter-chart \
-            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
-            --set 'dsh.llm.models={}' >/dev/null 2>&1; then
-            echo "dsh.enabled=true without dsh.llm.models must fail"
+            --set dsh.enabled=true --set serviceAccount.create=false \
+            >/dev/null 2>&1; then
+            echo "dsh.enabled=true without a service account must fail"
             exit 1
           fi
 
           # Uploads can be turned off; without them a ReadWriteOnce volume is
           # enough for a single replica, but never for several.
           helm template medrouter helm/medrouter-chart \
-            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.enabled=true \
             --set dsh.uploads.enabled=false \
             --set 'dsh.persistence.accessModes={ReadWriteOnce}' > /tmp/dsh-rwo.yaml
           if helm template medrouter helm/medrouter-chart \
-            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.enabled=true \
             --set dsh.replicaCount=2 \
             --set 'dsh.persistence.accessModes={ReadWriteOnce}' >/dev/null 2>&1; then
             echo "multi-replica dsh with ReadWriteOnce must fail"

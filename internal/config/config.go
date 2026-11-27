@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -175,10 +174,14 @@ type Config struct {
 	DshRequestTimeout time.Duration
 	DshDefaultPreset  string
 	DshMaxPromptChars int
-	// DshModels is the model list the Chat page offers, mirroring the models
-	// the dsh overlay declares for its DeepSeek provider. The first entry is
-	// the default; submits naming an id outside the list are rejected.
-	DshModels []DshModel
+	// DshProviderPrefix is the pi-ai provider id prefix the dsh runtime uses
+	// for each deployed inference service (provider = prefix + workspace name).
+	DshProviderPrefix string
+	// DshDeploymentName/Namespace identify the dsh Deployment MedRouter rolls
+	// when the set of running inference services changes, so the runtime
+	// regenerates its model catalog. Empty disables the sync.
+	DshDeploymentName      string
+	DshDeploymentNamespace string
 
 	// Uploads are written into a volume shared with the dsh pod. The root is
 	// the gateway-side mount point; Mount is the same directory as the dsh
@@ -332,7 +335,10 @@ func Load() (*Config, error) {
 		DshRequestTimeout: secondsEnv("DSH_REQUEST_TIMEOUT_SECONDS", 15),
 		DshDefaultPreset:  getenv("DSH_DEFAULT_PRESET", "standard"),
 		DshMaxPromptChars: intEnv("DSH_MAX_PROMPT_CHARS", 100000),
-		DshModels:         parseDshModels(os.Getenv("DSH_MODELS")),
+		DshProviderPrefix: getenv("DSH_PROVIDER_PREFIX", "mr-"),
+
+		DshDeploymentName:      strings.TrimSpace(os.Getenv("DSH_DEPLOYMENT_NAME")),
+		DshDeploymentNamespace: strings.TrimSpace(os.Getenv("DSH_DEPLOYMENT_NAMESPACE")),
 
 		DshUploadRoot:            strings.TrimSpace(os.Getenv("DSH_UPLOAD_ROOT")),
 		DshUploadMount:           strings.TrimRight(strings.TrimSpace(os.Getenv("DSH_UPLOAD_MOUNT")), "/"),
@@ -385,6 +391,11 @@ func Load() (*Config, error) {
 	}
 	if cfg.DshEnabled && cfg.DshDefaultPreset == "" {
 		cfg.DshDefaultPreset = "standard"
+	}
+	// The catalog sync needs both identifiers; half a configuration would
+	// silently stop refreshing the runtime's model list.
+	if (cfg.DshDeploymentName == "") != (cfg.DshDeploymentNamespace == "") {
+		return nil, fmt.Errorf("DSH_DEPLOYMENT_NAME and DSH_DEPLOYMENT_NAMESPACE must be set together")
 	}
 
 	return cfg, nil
@@ -540,64 +551,6 @@ func downloadModeEnv(raw string) string {
 		return "proxy"
 	}
 	return "presign"
-}
-
-// DshModel is one selectable model on the Chat page. ID is the id the dsh
-// runtime knows (the overlay's llm model id); Name is what the picker shows.
-type DshModel struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// defaultDshModels mirrors images/dsh/overlay.yml. Keep the two in sync when
-// the runtime catalog changes; DSH_MODELS overrides it without a rebuild.
-const defaultDshModelsJSON = `[{"id":"deepseek-flash","name":"DeepSeek-V4.1-Flash"},{"id":"deepseek-v4-pro","name":"DeepSeek-V4-Pro"}]`
-
-// parseDshModels reads DSH_MODELS as the same JSON the chart renders. An
-// unparsable or empty value falls back to the built-in catalog rather than
-// leaving the picker empty.
-func parseDshModels(raw string) []DshModel {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		raw = defaultDshModelsJSON
-	}
-	var models []DshModel
-	if err := json.Unmarshal([]byte(raw), &models); err != nil {
-		models = nil
-	}
-	seen := make(map[string]struct{}, len(models))
-	result := make([]DshModel, 0, len(models))
-	for _, model := range models {
-		id := strings.TrimSpace(model.ID)
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		name := strings.TrimSpace(model.Name)
-		if name == "" {
-			name = id
-		}
-		result = append(result, DshModel{ID: id, Name: name})
-	}
-	if len(result) > 0 {
-		return result
-	}
-	var fallback []DshModel
-	_ = json.Unmarshal([]byte(defaultDshModelsJSON), &fallback)
-	return fallback
-}
-
-// DshModelAllowed reports whether id is in the configured catalog.
-func (c *Config) DshModelAllowed(id string) bool {
-	for _, model := range c.DshModels {
-		if model.ID == id {
-			return true
-		}
-	}
-	return false
 }
 
 func daysEnv(key string, fallback int) time.Duration {

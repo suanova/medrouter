@@ -17,30 +17,11 @@
     compressionLevel: 1
     compressionThresholdBytes: 1024
 
-# 2) 模型端点：密钥由 DEEPSEEK_API_KEY 环境变量提供；DSH_LLM_BASE_URL 可把
-#    DeepSeek 适配器指向任意 OpenAI 兼容端点（例如平台自己的 /v1 网关）。
-#
-#    模型目录默认声明 deepseek-flash 支持图片输入，agent 每次渲染后都会 read_image
-#    看图改版；生成一份 10 页 PPT 大约多花 100 秒。DSH_IMAGE_INPUT=off 时目录里只
-#    声明文本输入，read_image 直接报错，agent 只做文本层面的结构检查（与不声明图片
-#    能力的 dsh 客户端行为一致）；默认 on 保持现有视觉质检。
-#    注意：这里整体替换 models，新增模型时要同步补进来。
-- id: llm-deepseek
-  config:
-    apiKeyEnv: DEEPSEEK_API_KEY
-    baseURL: !!js process.env.DSH_LLM_BASE_URL || undefined
-    models:
-      - id: deepseek-flash
-        name: DeepSeek-V4.1-Flash
-        contextWindow: 1048576
-        # 表达式里的三元 ` : ` 会被 YAML 当成映射分隔符，所以整段加引号。
-        inputModalities: !!js "process.env.DSH_IMAGE_INPUT === 'off' ? ['text'] : ['text', 'image']"
-        systemPromptUpdate: in-history
-        toolUpdate: addition-only
-      - id: deepseek-v4-pro
-        name: DeepSeek-V4-Pro
-        description: Stronger agentic coding, knowledge, and difficult reasoning; suited to complex or quality-critical tasks at higher cost.
-        contextWindow: 1048576
+# 2) 模型端点：不使用固定的 DeepSeek 上游。MedRouter 在容器启动时把「用户自己部署
+#    的推理服务」写成第二个 patch（/data/runtime-models.yml），挂载
+#    @deepseek-ai/dsh-llm-pi-ai，每个服务一条 openai-completions 路由，并用
+#    x-ai-eg-model 头选中平台 AI 网关背后的那个模型。这里不声明任何 llm 行；
+#    新增/删除推理服务由 MedRouter 触发 dsh 滚动重启来刷新该文件。
 
 # 3) Office 技能：Word / PowerPoint / Excel 的创建、编辑与 OOXML 结构校验。
 #    对应 @deepseek-ai/dsh-skill-office 包内置的 office-docx / office-pptx /

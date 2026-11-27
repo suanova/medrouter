@@ -102,7 +102,7 @@ describe('trimConversations', () => {
       id: `conv-${index}`,
       title: `c${index}`,
       preset: 'standard',
-      model: 'deepseek-flash',
+      model: 'biomistral-7b-u1-svc',
       sessionId: '',
       turns: Array.from({ length: 120 }, (_, turnIndex) => turn({ id: `t-${turnIndex}` })),
       createdAt: index,

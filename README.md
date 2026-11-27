@@ -13,7 +13,7 @@ MedRouter 是一个面向 AI 模型的托管与分享平台（目标类似 Huggi
 - 数据集库列表 `/datasets` 与详情 `/datasets/$name`：读取 CubeStack `Dataset`，按语义名合并版本，展示格式、体积、记录数、版本与访问/去标识化/伦理等边界信息；与模型库独立降级
 - 数据集 / 模型文件浏览（配置 S3 后启用）：在详情页「文件」tab 读取 `Dataset.spec.storage.s3.uri` 或 `ModelVersion.spec.storage.s3.uri`，按目录分页浏览；浏览公开，下载需登录并由后端签发短期预签名 URL
 - 工作室 `/studio`：模型与数据集目录的入口页，展示两个目录的最近更新与接入状态；运行态、配额与审计尚未接入，页面明确标注而不展示估算数值
-- 对话 `/chat`：接入部署在集群里的 DeepSeek Harness（dsh）智能体，支持多轮会话、模型切换、预设、附件上传与产物下载；镜像内置演示文稿/医学写作/临床试验技能；对话历史存在浏览器，工作区、会话归属与产物按用户隔离
+- 对话 `/chat`：接入集群里的 DeepSeek Harness（dsh）智能体，**只运行用户自己部署的推理服务**（模型下拉来自 Studio 部署且运行中的服务）；支持多轮会话、模型切换、预设、附件上传与产物下载；镜像内置演示文稿/医学写作/临床试验技能；对话历史存在浏览器，工作区、会话归属与产物按用户隔离
 - 首页内容暂留空，仅保留站点导航
 - 生产模式由 Go 二进制内嵌前端静态资源，并支持部署在子路径（`BASE_PATH`）
 
@@ -217,7 +217,8 @@ CI 工作流 [`.github/workflows/kind-postgres.yaml`](.github/workflows/kind-pos
 | `DSH_REQUEST_TIMEOUT_SECONDS` | `15` | 单次 dsh-api 调用超时（提交是异步的） |
 | `DSH_DEFAULT_PRESET` | `standard` | 未指定预设时的默认值 |
 | `DSH_MAX_PROMPT_CHARS` | `100000` | 单条消息字符上限 |
-| `DSH_MODELS` | 两个 DeepSeek 模型 | 对话页模型下拉（JSON，第一项为默认；需与镜像 `overlay.yml` 一致） |
+| `DSH_PROVIDER_PREFIX` | `mr-` | dsh 为每个推理服务生成的 pi-ai provider 前缀 |
+| `DSH_DEPLOYMENT_NAME` / `DSH_DEPLOYMENT_NAMESPACE` | 空 | 推理服务集合变化时由 MedRouter 滚动重启的 dsh Deployment |
 | `DSH_UPLOAD_ROOT` / `DSH_UPLOAD_MOUNT` | 空 | 与 dsh 共享的上传卷：网关侧路径 / 容器内路径，必须同时设置 |
 | `DSH_UPLOAD_MAX_BYTES` / `DSH_UPLOAD_MAX_FILES` | `25 MiB` / `10` | 单文件大小与每轮附件数上限 |
 | `DSH_UPLOAD_RETENTION_DAYS` / `DSH_UPLOAD_MAX_FILES_PER_USER` | `7` / `200` | 每小时清理策略；`0` 关闭对应规则 |

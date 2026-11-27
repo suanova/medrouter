@@ -80,6 +80,11 @@ func main() {
 	workspaceService := service.NewWorkspaceService(cfg, workspaceCluster, datasetSize).
 		WithFineTune(catalog.StorageOf, finetuneService).
 		WithDeployment(catalog.Artifact, catalog.Profiles)
+	if cfg.DshEnabled && cfg.DshDeploymentName != "" {
+		// Roll the dsh runtime when the running inference set changes so it
+		// rebuilds its model routes.
+		workspaceService.WithDshCatalog(cfg.DshDeploymentName, cfg.DshDeploymentNamespace)
+	}
 	studioController := controller.NewStudioController(service.NewFavoriteService(), workspaceService, finetuneService)
 
 	// The chat controller talks to the in-cluster dsh runtime. A disabled or

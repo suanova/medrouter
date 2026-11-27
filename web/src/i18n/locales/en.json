@@ -1040,6 +1040,8 @@
     "uploadFailed": "Upload failed",
     "presetLocked": "The preset is chosen when a conversation starts. Start a new conversation to switch.",
     "model": "Model",
-    "promptTooLong": "Messages are limited to {{max}} characters."
+    "promptTooLong": "Messages are limited to {{max}} characters.",
+    "noModelsText": "No running inference service yet: deploy a model in Studio, then start a conversation on it.",
+    "goStudio": "Open Studio"
   }
 }

@@ -74,9 +74,9 @@ jobs:
   dsh-image:
     name: Build and push DSH runtime image
     runs-on: ubuntu-latest
-    # node_modules + the Office skills make this a slow build; the cache keeps
-    # subsequent runs inside the limit.
-    timeout-minutes: 60
+    # node_modules + the Office skills make this a slow build, and the ~2 GB
+    # push to Harbor can take a while on a busy runner.
+    timeout-minutes: 120
     env:
       IMAGE: harbor.isuanova.com/suanova/medrouter-dsh
       HAS_REGISTRY_CREDS: ${{ secrets.CI_BOT_PASSWORD != '' && vars.CI_BOT_NAME != '' }}

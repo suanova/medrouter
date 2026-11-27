@@ -12,6 +12,9 @@ FROM node:24-bookworm-slim
 
 ARG DSH_VERSION=0.2.2-rc.1
 ARG DSH_SKILL_OFFICE_VERSION=0.2.2-rc.1
+# Routes OpenAI-compatible gateways (the platform's deployed inference services)
+# through per-route headers. Versioned with the harness core.
+ARG DSH_PI_AI_VERSION=0.2.2-rc.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates python3 python3-pip wget \
@@ -35,6 +38,7 @@ COPY plugins/medrouter-skills /opt/dsh-plugins/medrouter-skills
 COPY pnpm-workspace.yaml /opt/dsh-seed/profiles/web/pnpm-workspace.yaml
 RUN DSH_HOME=/opt/dsh-seed dsh plugin --profile web add /opt/dsh-plugins/dsh-api \
     && DSH_HOME=/opt/dsh-seed dsh plugin --profile web add /opt/dsh-plugins/medrouter-skills \
+    && DSH_HOME=/opt/dsh-seed dsh plugin --profile web add "@deepseek-ai/dsh-llm-pi-ai@${DSH_PI_AI_VERSION}" \
     && DSH_HOME=/opt/dsh-seed dsh plugin --profile web add \
         "@deepseek-ai/dsh-skill-office@${DSH_SKILL_OFFICE_VERSION}"
 

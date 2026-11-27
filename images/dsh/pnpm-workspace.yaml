@@ -16,3 +16,6 @@ autoInstallPeers: false
 
 allowBuilds:
   koffi: false
+  # pi-ai pulls protobufjs, whose postinstall is not needed at runtime. pnpm 11
+  # treats an unlisted ignored build script as an error, so deny it explicitly.
+  protobufjs: false

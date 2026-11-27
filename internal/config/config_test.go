@@ -41,7 +41,8 @@ var envKeys = []string{
 	"DSH_ENABLED", "DSH_BASE_URL", "DSH_HEADLESS_HOST", "DSH_API_KEY",
 	"DSH_REQUEST_TIMEOUT_SECONDS", "DSH_DEFAULT_PRESET", "DSH_MAX_PROMPT_CHARS",
 	"DSH_UPLOAD_ROOT", "DSH_UPLOAD_MOUNT", "DSH_UPLOAD_MAX_BYTES", "DSH_UPLOAD_MAX_FILES",
-	"DSH_UPLOAD_RETENTION_DAYS", "DSH_UPLOAD_MAX_FILES_PER_USER", "DSH_MODELS",
+	"DSH_UPLOAD_RETENTION_DAYS", "DSH_UPLOAD_MAX_FILES_PER_USER",
+	"DSH_PROVIDER_PREFIX", "DSH_DEPLOYMENT_NAME", "DSH_DEPLOYMENT_NAMESPACE",
 }
 
 func clearEnv(t *testing.T) {
@@ -131,29 +132,32 @@ func TestDSHConfig(t *testing.T) {
 	if cfg.DshDefaultPreset != "standard" || cfg.DshUploadMaxBytes != 25<<20 || cfg.DshUploadMaxFiles != 10 {
 		t.Fatalf("dsh defaults = %+v", cfg)
 	}
-	if len(cfg.DshModels) != 2 || cfg.DshModels[0].ID != "deepseek-flash" || !cfg.DshModelAllowed("deepseek-v4-pro") {
-		t.Fatalf("dsh models = %+v", cfg.DshModels)
+	if cfg.DshProviderPrefix != "mr-" {
+		t.Fatalf("provider prefix = %q", cfg.DshProviderPrefix)
+	}
+	if cfg.DshDeploymentName != "" || cfg.DshDeploymentNamespace != "" {
+		t.Fatalf("catalog sync should be off by default: %+v", cfg)
 	}
 
-	// The chart passes the picker catalog as JSON; an unparsable value must not
-	// leave the chat page without a model.
-	t.Setenv("DSH_MODELS", `[{"id":"custom-model","name":"Custom"}]`)
+	// The chart passes both identifiers, and the prefix both pods must agree on.
+	t.Setenv("DSH_PROVIDER_PREFIX", "svc-")
+	t.Setenv("DSH_DEPLOYMENT_NAME", "medrouter-dsh")
+	t.Setenv("DSH_DEPLOYMENT_NAMESPACE", "medrouter")
 	cfg, err = Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.DshModels) != 1 || cfg.DshModels[0].ID != "custom-model" || cfg.DshModels[0].Name != "Custom" {
-		t.Fatalf("custom models = %+v", cfg.DshModels)
+	if cfg.DshProviderPrefix != "svc-" || cfg.DshDeploymentName != "medrouter-dsh" || cfg.DshDeploymentNamespace != "medrouter" {
+		t.Fatalf("dsh runtime config = %+v", cfg)
 	}
-	t.Setenv("DSH_MODELS", `not-json`)
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
+
+	// Half a catalog-sync configuration would silently stop rolling the runtime.
+	t.Setenv("DSH_DEPLOYMENT_NAMESPACE", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected DSH_DEPLOYMENT_NAME/NAMESPACE to be required together")
 	}
-	if len(cfg.DshModels) != 2 || cfg.DshModels[0].ID != "deepseek-flash" {
-		t.Fatalf("fallback models = %+v", cfg.DshModels)
-	}
-	t.Setenv("DSH_MODELS", "")
+	t.Setenv("DSH_DEPLOYMENT_NAME", "")
+	t.Setenv("DSH_DEPLOYMENT_NAMESPACE", "")
 
 	// Enabled without an address is a misconfiguration, not a disabled page.
 	t.Setenv("DSH_ENABLED", "true")

@@ -44,6 +44,7 @@ func TestDshClientSubmitForwardsIdentityAndOptions(t *testing.T) {
 		SessionID: "sess-0",
 		Preset:    "standard",
 		Model:     "deepseek-v4-pro",
+		Provider:  "mr-deepseek-v4-pro",
 		Attachments: []DshAttachment{
 			{Name: "report.pdf", Path: "/data/uploads/42/abc-report.pdf"},
 		},
@@ -64,8 +65,8 @@ func TestDshClientSubmitForwardsIdentityAndOptions(t *testing.T) {
 	if gotBody["sessionId"] != "sess-0" || gotBody["preset"] != "standard" {
 		t.Fatalf("body = %+v", gotBody)
 	}
-	if gotBody["model"] != "deepseek-v4-pro" {
-		t.Fatalf("model = %v, want deepseek-v4-pro", gotBody["model"])
+	if gotBody["model"] != "deepseek-v4-pro" || gotBody["provider"] != "mr-deepseek-v4-pro" {
+		t.Fatalf("model/provider = %v/%v", gotBody["model"], gotBody["provider"])
 	}
 	prompt, _ := gotBody["prompt"].(string)
 	if !strings.Contains(prompt, "[Uploaded files]") || !strings.Contains(prompt, "/data/uploads/42/abc-report.pdf (report.pdf)") {

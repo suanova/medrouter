@@ -194,6 +194,11 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: DSH_API_KEY
+            # Rolling the dsh deployment when the running inference set changes.
+            - name: DSH_DEPLOYMENT_NAME
+              value: {{ include "medrouter.dshName" . | quote }}
+            - name: DSH_DEPLOYMENT_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
             {{- end }}
             {{- with .Values.envVars }}
             {{- toYaml . | nindent 12 }}

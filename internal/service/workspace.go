@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -114,6 +115,14 @@ type WorkspaceService struct {
 	modelInfo ModelInfoFunc
 	profiles  ProfilesFunc
 	now       func() time.Time
+
+	// dshDeployment/Npace identify the runtime MedRouter rolls when the set of
+	// running inference services changes. Empty disables the catalog sync.
+	dshDeployment string
+	dshNamespace  string
+	catalogMu     sync.Mutex
+	catalogHash   string
+	catalogWarned bool
 }
 
 func NewWorkspaceService(cfg *config.Config, cluster WorkspaceCluster, datasetSize DatasetSizeFunc) *WorkspaceService {
@@ -385,6 +394,8 @@ func (s *WorkspaceService) Reconcile(ctx context.Context) {
 		model.DB.Model(&model.Workspace{}).Where("id = ?", row.ID).
 			Updates(map[string]any{"phase": phase, "reason": reason, "endpoint": state.Endpoint})
 	}
+	// A running-set change must reach the dsh runtime's startup catalog.
+	s.syncAgentCatalog(ctx)
 }
 
 // RunReconciler polls until ctx is done.
