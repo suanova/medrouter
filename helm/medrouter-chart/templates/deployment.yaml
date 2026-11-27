@@ -188,14 +188,28 @@ spec:
                   key: {{ .Values.datasetFiles.credentials.sessionTokenKey | quote }}
                   optional: true
             {{- end }}
+            {{- if .Values.dsh.enabled }}
+            - name: DSH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DSH_API_KEY
+            {{- end }}
             {{- with .Values.envVars }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- if or $isSQLite .Values.extraVolumeMounts }}
+          {{- if or $isSQLite .Values.extraVolumeMounts (and .Values.dsh.enabled .Values.dsh.uploads.enabled) }}
           volumeMounts:
             {{- if $isSQLite }}
             - name: data
               mountPath: /data
+            {{- end }}
+            {{- if and .Values.dsh.enabled .Values.dsh.uploads.enabled }}
+            # The same volume the dsh pod mounts at /data. Attachments land in
+            # <volume>/uploads/<userId>, which the agent reads at the configured
+            # dsh.uploads.mount.
+            - name: dsh-data
+              mountPath: /data/dsh
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
@@ -229,7 +243,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       terminationGracePeriodSeconds: 30
-      {{- if or $isSQLite .Values.extraVolumes }}
+      {{- if or $isSQLite .Values.extraVolumes (and .Values.dsh.enabled .Values.dsh.uploads.enabled) }}
       volumes:
         {{- if $isSQLite }}
         - name: data
@@ -239,6 +253,11 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- end }}
+        {{- if and .Values.dsh.enabled .Values.dsh.uploads.enabled }}
+        - name: dsh-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.dsh.persistence.existingClaim | default (include "medrouter.dshPVCName" .) }}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

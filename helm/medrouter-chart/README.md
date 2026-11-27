@@ -303,8 +303,9 @@ secret:
 | `SMTP_PASSWORD` | 使用 SMTP 时 |
 | `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_SECRET` / `OIDC_CLIENT_SECRET` | 对应 OAuth 提供商 |
 | `INITIAL_ADMIN_PASSWORD` | 使用初始化管理员时 |
+| `DSH_API_KEY` / `DSH_DEEPSEEK_API_KEY` | `dsh.enabled=true` 时（两个都需要） |
 
-其余 key 可省略。Deployment 对可选 key 使用 `optional: true`。托管 PostgreSQL 模式下 `SQL_DSN` 由 Chart 自己生成，不需要放进外部 Secret。
+其余 key 可省略。Deployment 对可选 key 使用 `optional: true`；DSH 的两个 key 是必需的，缺失时 Pod 会停在 `CreateContainerConfigError`。托管 PostgreSQL 模式下 `SQL_DSN` 由 Chart 自己生成，不需要放进外部 Secret。`secret.create=true` 时 `DSH_API_KEY` 自动生成，`DSH_DEEPSEEK_API_KEY` 必须显式提供。
 
 ## 模型库、数据集库与 RBAC
 
@@ -429,7 +430,115 @@ curl -s -b cookie.txt "https://<site>/medrouter/api/datasets/<name>/files/previe
 - **`SignatureDoesNotMatch`**：`region` 与端点不匹配。
 - **配了内网域名却一直 401 / 返回 JSON 错误**：确认它是 S3 协议端点。US3 的内网 S3 域名形如 `internal.s3-<region>.<domain>`；`<bucket>.internal-<region>-01.<domain>` 是 UFile 原生 API，不认 SigV4，不能填进 `endpoint`。
 
+## DSH 智能体（对话页）
+
+`dsh.enabled=true` 会在集群里运行 DeepSeek Harness 运行时（镜像来自本仓库
+`images/dsh`），MedRouter 页面顶部出现「对话」入口。浏览器只与 MedRouter 通信：
+MedRouter 校验登录会话，把每个请求连同用户 id 转发给 dsh-api；dsh 按用户隔离
+工作目录、会话归属、任务查询与产物下载。
+
+### 构建镜像
+
+```bash
+docker build -t harbor.isuanova.com/suanova/medrouter-dsh:latest images/dsh
+docker push harbor.isuanova.com/suanova/medrouter-dsh:latest
+```
+
+镜像内置 dsh 0.2.2-rc.1、dsh-api 插件、Office 技能（python-pptx / python-docx /
+openpyxl）与 `medrouter-skills`（演示文稿设计、医学课件、医学写作、临床试验口径），
+可以生成 PPT/DOCX/XLSX 并把文件交还给页面下载。技能由模型按任务自动加载，无需
+额外配置。
+
+### 安装
+
+```bash
+helm upgrade --install medrouter ./helm/medrouter-chart -n medrouter --create-namespace \
+  --set dsh.enabled=true \
+  --set secrets.DSH_DEEPSEEK_API_KEY=sk-... \
+  --set dsh.persistence.storageClassName=<支持 RWX 的 StorageClass>
+```
+
+- `secrets.DSH_DEEPSEEK_API_KEY` 只在 dsh Pod 内使用，MedRouter 与浏览器都拿不到。
+- `secrets.DSH_API_KEY` 留空时自动生成，MedRouter 与 dsh-api 共用，跨升级保持稳定。
+- `dsh.image.repository` / `tag` 指向你推送的镜像；默认 `latest`，生产环境建议固定到 `sha-*` 或版本 tag。
+
+### 调度：只跑在 master
+
+默认 `dsh.scheduling.masterOnly=true`：
+
+- `nodeSelector: {"node-role.kubernetes.io/control-plane": ""}`
+- tolerations：`node-role.kubernetes.io/control-plane` 与
+  `node-role.kubernetes.io/master` 的 `NoSchedule`
+
+节点标签不是 control-plane 形态时，覆盖 `dsh.scheduling.nodeSelector`；
+允许 dsh 跑在任意节点时设 `dsh.scheduling.masterOnly=false`。
+
+### HPA 与多副本
+
+```yaml
+dsh:
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+```
+
+dsh-api 的任务表与运行中的 agent 在**进程内存**里，会话与工作区在数据卷上。
+
+- MedRouter 通过 headless Service `<release>-dsh-headless` 解析 Pod IP，按用户 id
+  哈希固定到同一个 Pod，因此同一账号的提交、轮询、下载都会落到同一副本。
+- 缩容或 Pod 重启会让**在途**任务失败（任务记录随进程消失），旧 `sessionId`
+  也会失效（dsh-api 只在进程内记录会话）；页面收到 `SESSION_EXPIRED` 后会清掉
+  该会话，下一条消息自动开新会话。工作区文件仍在共享卷上。
+- 多副本必须使用支持 `ReadWriteMany` 的存储类；Chart 会在渲染阶段拒绝只有
+  `ReadWriteOnce` 的多副本配置。
+- HPA 需要集群安装 metrics-server；CPU 只是粗略信号，agent 大部分时间在等模型。
+
+### 数据卷与附件
+
+一个 PVC（默认 `<release>-dsh-data`，20Gi，`ReadWriteMany`）同时挂载给两个 Pod：
+
+| Pod | 挂载点 | 内容 |
+|---|---|---|
+| dsh | `/data` | `DSH_HOME`、`workspace/<userId>`、`uploads/<userId>` |
+| MedRouter | `/data/dsh` | 只写 `uploads/<userId>` |
+
+- 附件上传需要 `dsh.uploads.enabled=true`（默认）与 RWX 存储；没有共享存储时设
+  `dsh.uploads.enabled=false`，对话与产物下载仍可用。
+- 上传扩展名白名单、单文件 25 MiB、每轮最多 10 个；每小时清理超过
+  `retentionDays` 或每用户超过 `maxFilesPerUser` 的文件。
+- 提交时后端校验附件路径必须落在当前用户目录且文件真实存在，拒绝目录穿越、
+  符号链接与其他用户的路径。
+- PVC 默认带 `helm.sh/resource-policy: keep`，`helm uninstall` 不会删掉会话、
+  工作区与附件；确认不要数据后再手动删除。
+
+### 模型端点与预算
+
+| 值 | 默认 | 说明 |
+|---|---|---|
+| `dsh.llm.baseURL` | 空 | DeepSeek 官方端点；可指向任意 OpenAI 兼容网关 |
+| `dsh.llm.models` | `deepseek-flash` / `deepseek-v4-pro` | 对话页模型下拉的目录；id 必须与 `overlay.yml` 的模型一致，第一项为默认 |
+| `dsh.llm.imageInput` | `on` | 设为 `off` 关闭 Office 渲染后看图质检（更快） |
+| `dsh.agent.defaultPreset` | `standard` | 默认预设；包含 bash、文件编辑与 Office 技能 |
+| `dsh.agent.defaultTimeoutSeconds` | `1200` | 单轮预算 |
+| `dsh.agent.maxTimeoutSeconds` | `7200` | 单轮硬上限 |
+| `dsh.agent.questionTimeoutSeconds` | `600` | `ask_user_question` 等待人工的时间，超时按跳过继续 |
+| `dsh.agent.imageReviewLimit` | `0` | 单轮 `read_image` 次数上限，0 不限制 |
+| `dsh.agent.maxConcurrent` | `8` | 每个副本并发任务数 |
+
+### 对话页会话边界
+
+- 对话历史保存在**浏览器 localStorage**（按用户 id 分组），服务端只保存 dsh 的
+  会话与工作区；换浏览器看不到历史消息，但输入会话 id 仍可续接。
+- 模型下拉来自 `dsh.llm.models`；同一会话内可以换模型（dsh 会插入一条模型切换
+  提示）。预设（工具集）在会话开始后锁定，换预设需新建对话。
+- 「停止」只是请求 dsh 中止当前轮次并停止本地轮询，不会重新提交任务。
+- 产物通过 MedRouter 同源代理下载（`/api/chat/tasks/:id/files/:key`），dsh 不需要
+  暴露到集群外。
+
 ## 常用配置
+
 
 | 值 | 默认 | 说明 |
 |---|---|---|
@@ -471,6 +580,19 @@ curl -s -b cookie.txt "https://<site>/medrouter/api/datasets/<name>/files/previe
 | `datasetFiles.credentials.existingSecret` | 空 | 存放 `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` 的 Secret 名 |
 | `datasetFiles.downloadMode` | `presign` | `presign` 浏览器直连对象存储；`proxy` 字节经 MedRouter 转发 |
 | `datasetFiles.preview.*` / `download.*` | 见上文 | 预览窗口与大小上限、下载上限与配额 |
+| `dsh.enabled` | `false` | 运行 DSH 智能体并启用「对话」页 |
+| `dsh.image.repository` / `tag` | `harbor.isuanova.com/suanova/medrouter-dsh` / `latest` | DSH 运行时镜像；生产建议固定 sha 或版本 tag |
+| `dsh.scheduling.masterOnly` | `true` | 只调度到 master/control-plane 并容忍其污点 |
+| `dsh.replicaCount` | `1` | 关闭 HPA 时的副本数 |
+| `dsh.autoscaling.enabled` | `false` | 渲染 HPA（需要 metrics-server） |
+| `dsh.autoscaling.minReplicas` / `maxReplicas` | `1` / `3` | HPA 范围；多副本需要 RWX 存储 |
+| `dsh.persistence.accessModes` | `[ReadWriteMany]` | 多副本或附件上传必须包含 RWX |
+| `dsh.persistence.size` / `storageClassName` | `20Gi` / 空 | DSH 数据卷 |
+| `dsh.uploads.enabled` | `true` | 对话附件上传（需要共享卷） |
+| `dsh.agent.defaultPreset` | `standard` | 默认预设 |
+| `dsh.llm.models` | 两个 DeepSeek 模型 | 对话页可选模型；第一项为默认 |
+| `secrets.DSH_DEEPSEEK_API_KEY` | 空（`dsh.enabled=true` 时必填） | dsh Pod 使用的模型密钥 |
+| `secrets.DSH_API_KEY` | 空（自动生成） | MedRouter 与 dsh-api 的共享密钥 |
 | `ingress.enabled` | `false` | 是否创建 Ingress |
 | `gateway.enabled` | `true` | 是否创建 Gateway API HTTPRoute（CubeStack 平台） |
 | `gateway.parent.name` | `cubestack-gateway` | HTTPRoute 挂载的平台 Gateway 名 |
@@ -510,6 +632,12 @@ Chart 在渲染阶段会拒绝以下配置：
 - `config.extra` 覆盖 Chart 管理的保留键
 - 开启模型库或数据集库 RBAC 但没有可用的 ServiceAccount
 - `modelLibrary.*` 或 `datasetLibrary.*` 的 `cacheTTLSeconds` / `requestTimeoutSeconds` 小于 1
+- `dsh.enabled=true` 但镜像仓库为空、`secrets.DSH_DEEPSEEK_API_KEY` 为空（`secret.create=true` 时）
+- `dsh.autoscaling.enabled=true` 但没有任何指标，或 `maxReplicas < minReplicas`
+- dsh 多副本或 `dsh.uploads.enabled=true` 但数据卷不包含 `ReadWriteMany`
+- `dsh.uploads.enabled=true` 但未启用持久化
+- `dsh.agent` 的超时非正或 `maxTimeoutSeconds < defaultTimeoutSeconds`，或 `maxConcurrent < 1`
+- `dsh.service.port` 非法、`dsh.uploads.mount` 不是绝对路径
 
 ## 升级与卸载
 

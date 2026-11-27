@@ -1,0 +1,163 @@
+{{- if .Values.dsh.enabled }}
+{{- $secretName := include "medrouter.secretName" . -}}
+{{- $replicas := int (default 1 .Values.dsh.replicaCount) -}}
+{{- $nodeSelector := .Values.dsh.scheduling.nodeSelector -}}
+{{- if and .Values.dsh.scheduling.masterOnly (not $nodeSelector) -}}
+{{- $nodeSelector = dict "node-role.kubernetes.io/control-plane" "" -}}
+{{- end -}}
+{{- $tolerations := .Values.dsh.scheduling.tolerations -}}
+{{- if and .Values.dsh.scheduling.masterOnly (not $tolerations) -}}
+{{- $tolerations = list
+      (dict "key" "node-role.kubernetes.io/control-plane" "operator" "Exists" "effect" "NoSchedule")
+      (dict "key" "node-role.kubernetes.io/master" "operator" "Exists" "effect" "NoSchedule") -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "medrouter.dshName" . }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dsh
+spec:
+  # The HPA owns the scale when enabled; this is the initial count.
+  replicas: {{ $replicas }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "medrouter.selectorLabels" (dict "root" . "component" "dsh") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "medrouter.selectorLabels" (dict "root" . "component" "dsh") | nindent 8 }}
+        {{- with .Values.dsh.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Roll when the API key rotates so the new secret is picked up.
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.dsh.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # dsh never talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      {{- with .Values.dsh.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: dsh
+          image: "{{ .Values.dsh.image.repository }}:{{ default .Chart.AppVersion .Values.dsh.image.tag }}"
+          imagePullPolicy: {{ .Values.dsh.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3080
+              protocol: TCP
+          env:
+            - name: DSH_HOME
+              value: /data
+            - name: DSH_WORKSPACE
+              value: /data/workspace
+            - name: TZ
+              value: Asia/Shanghai
+            - name: DSH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DSH_API_KEY
+            - name: DEEPSEEK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DSH_DEEPSEEK_API_KEY
+            - name: DSH_LLM_BASE_URL
+              value: {{ .Values.dsh.llm.baseURL | quote }}
+            - name: DSH_IMAGE_INPUT
+              value: {{ .Values.dsh.llm.imageInput | quote }}
+            - name: DSH_DEFAULT_PRESET
+              value: {{ .Values.dsh.agent.defaultPreset | quote }}
+            - name: DSH_DEFAULT_TIMEOUT_MS
+              value: {{ mul (int .Values.dsh.agent.defaultTimeoutSeconds) 1000 | quote }}
+            - name: DSH_MAX_TIMEOUT_MS
+              value: {{ mul (int .Values.dsh.agent.maxTimeoutSeconds) 1000 | quote }}
+            - name: DSH_QUESTION_TIMEOUT_MS
+              value: {{ mul (int .Values.dsh.agent.questionTimeoutSeconds) 1000 | quote }}
+            - name: DSH_IMAGE_REVIEW_LIMIT
+              value: {{ .Values.dsh.agent.imageReviewLimit | quote }}
+            - name: DSH_MAX_CONCURRENT
+              value: {{ .Values.dsh.agent.maxConcurrent | quote }}
+            - name: DSH_MAX_ARTIFACT_BYTES
+              value: {{ .Values.dsh.agent.maxArtifactBytes | int64 | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # dsh binds a concrete interface address (0.0.0.0 is refused) and the
+          # entrypoint records it in /tmp/dsh-bind-host. An exec probe is used
+          # because Kubernetes HTTP header values cannot be read from a Secret.
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O /dev/null --header="X-API-Key: $DSH_API_KEY" "http://$(cat /tmp/dsh-bind-host):3080/api/v1/health"
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.dsh.resources | nindent 12 }}
+          {{- with .Values.dsh.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      # A turn can run for up to maxTimeoutSeconds; on scale-in dsh-api cancels
+      # the live agent and the task settles as failed. In-flight turns are not
+      # migrated to another pod.
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          {{- if or .Values.dsh.persistence.enabled .Values.dsh.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dsh.persistence.existingClaim | default (include "medrouter.dshPVCName" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with $nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dsh.scheduling.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

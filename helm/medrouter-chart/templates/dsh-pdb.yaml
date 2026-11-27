@@ -1,0 +1,15 @@
+{{- $minReplicas := include "medrouter.dshMinReplicas" . | int }}
+{{- if and .Values.dsh.enabled .Values.dsh.pdb.enabled (gt $minReplicas 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "medrouter.dshName" . }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dsh
+spec:
+  minAvailable: {{ .Values.dsh.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "medrouter.selectorLabels" (dict "root" . "component" "dsh") | nindent 6 }}
+{{- end }}

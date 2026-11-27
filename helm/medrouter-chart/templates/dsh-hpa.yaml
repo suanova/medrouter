@@ -1,0 +1,39 @@
+{{- if and .Values.dsh.enabled .Values.dsh.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "medrouter.dshName" . }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dsh
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "medrouter.dshName" . }}
+  minReplicas: {{ int .Values.dsh.autoscaling.minReplicas }}
+  maxReplicas: {{ int .Values.dsh.autoscaling.maxReplicas }}
+  metrics:
+    {{- if gt (int .Values.dsh.autoscaling.targetCPUUtilizationPercentage) 0 }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ int .Values.dsh.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- with .Values.dsh.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- if gt (int .) 0 }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ int . }}
+    {{- end }}
+    {{- end }}
+  {{- with .Values.dsh.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -10,6 +10,7 @@ const NAV = [
   { to: '/models' as const, label: 'Models' },
   { to: '/datasets' as const, label: 'Datasets' },
   { to: '/studio' as const, label: 'Studio' },
+  { to: '/chat' as const, label: 'Chat' },
 ]
 
 function userInitials(name: string): string {

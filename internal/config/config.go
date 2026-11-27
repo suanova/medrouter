@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -161,6 +163,32 @@ type Config struct {
 	// StudioGatewayRouter is the AI gateway router an InferenceService
 	// publishes through.
 	StudioGatewayRouter string
+
+	// DSH is the DeepSeek Harness agent runtime behind the 对话 (Chat) page.
+	// MedRouter authenticates the browser session and forwards each turn to
+	// dsh-api with the user id, so one dsh deployment serves every account
+	// while keeping workspaces and sessions separate.
+	DshEnabled        bool
+	DshBaseURL        string
+	DshHeadlessHost   string
+	DshAPIKey         string
+	DshRequestTimeout time.Duration
+	DshDefaultPreset  string
+	DshMaxPromptChars int
+	// DshModels is the model list the Chat page offers, mirroring the models
+	// the dsh overlay declares for its DeepSeek provider. The first entry is
+	// the default; submits naming an id outside the list are rejected.
+	DshModels []DshModel
+
+	// Uploads are written into a volume shared with the dsh pod. The root is
+	// the gateway-side mount point; Mount is the same directory as the dsh
+	// container sees it and is what the agent reads.
+	DshUploadRoot            string
+	DshUploadMount           string
+	DshUploadMaxBytes        int64
+	DshUploadMaxFiles        int
+	DshUploadRetention       time.Duration
+	DshUploadMaxFilesPerUser int
 }
 
 // defaultFinetuneImage is pinned by digest: a fine-tune must run the exact
@@ -296,6 +324,22 @@ func Load() (*Config, error) {
 		StudioFinetuneDeadline:   secondsEnv("STUDIO_FINETUNE_DEADLINE_SECONDS", 43200),
 		StudioFinetuneMaxSamples: intEnv("STUDIO_FINETUNE_MAX_SAMPLES", 20000),
 		StudioGatewayRouter:      getenv("STUDIO_AI_GATEWAY_ROUTER", "cubestack-ai-gateway-private"),
+
+		DshEnabled:        boolEnv("DSH_ENABLED", false),
+		DshBaseURL:        strings.TrimRight(strings.TrimSpace(os.Getenv("DSH_BASE_URL")), "/"),
+		DshHeadlessHost:   strings.TrimRight(strings.TrimSpace(os.Getenv("DSH_HEADLESS_HOST")), "/"),
+		DshAPIKey:         os.Getenv("DSH_API_KEY"),
+		DshRequestTimeout: secondsEnv("DSH_REQUEST_TIMEOUT_SECONDS", 15),
+		DshDefaultPreset:  getenv("DSH_DEFAULT_PRESET", "standard"),
+		DshMaxPromptChars: intEnv("DSH_MAX_PROMPT_CHARS", 100000),
+		DshModels:         parseDshModels(os.Getenv("DSH_MODELS")),
+
+		DshUploadRoot:            strings.TrimSpace(os.Getenv("DSH_UPLOAD_ROOT")),
+		DshUploadMount:           strings.TrimRight(strings.TrimSpace(os.Getenv("DSH_UPLOAD_MOUNT")), "/"),
+		DshUploadMaxBytes:        bytesEnv("DSH_UPLOAD_MAX_BYTES", 25<<20),
+		DshUploadMaxFiles:        intEnv("DSH_UPLOAD_MAX_FILES", 10),
+		DshUploadRetention:       daysOrDisabledEnv("DSH_UPLOAD_RETENTION_DAYS", 7),
+		DshUploadMaxFilesPerUser: zeroOKIntEnv("DSH_UPLOAD_MAX_FILES_PER_USER", 200),
 	}
 
 	if cfg.SessionSecret == "" {
@@ -322,7 +366,33 @@ func Load() (*Config, error) {
 		cfg.S3PreviewTextWindow = 1 << 20
 	}
 
+	if cfg.DshEnabled && cfg.DshBaseURL == "" {
+		return nil, fmt.Errorf("DSH_BASE_URL is required when DSH_ENABLED=true")
+	}
+	// Uploads need both paths: the gateway writes to Root, the agent reads the
+	// same files at Mount. One without the other would produce a prompt
+	// pointing at a path the agent cannot open, so reject it instead.
+	if (cfg.DshUploadRoot == "") != (cfg.DshUploadMount == "") {
+		return nil, fmt.Errorf("DSH_UPLOAD_ROOT and DSH_UPLOAD_MOUNT must be set together")
+	}
+	if cfg.DshUploadRoot != "" {
+		if !filepath.IsAbs(cfg.DshUploadRoot) {
+			return nil, fmt.Errorf("DSH_UPLOAD_ROOT must be an absolute path")
+		}
+		if !filepath.IsAbs(cfg.DshUploadMount) {
+			return nil, fmt.Errorf("DSH_UPLOAD_MOUNT must be an absolute path")
+		}
+	}
+	if cfg.DshEnabled && cfg.DshDefaultPreset == "" {
+		cfg.DshDefaultPreset = "standard"
+	}
+
 	return cfg, nil
+}
+
+// DshUploadsEnabled reports whether the shared upload volume is configured.
+func (c *Config) DshUploadsEnabled() bool {
+	return c.DshEnabled && c.DshUploadRoot != "" && c.DshUploadMount != ""
 }
 
 func (c *Config) IsProduction() bool { return c.AppEnv == "production" }
@@ -472,8 +542,89 @@ func downloadModeEnv(raw string) string {
 	return "presign"
 }
 
+// DshModel is one selectable model on the Chat page. ID is the id the dsh
+// runtime knows (the overlay's llm model id); Name is what the picker shows.
+type DshModel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// defaultDshModels mirrors images/dsh/overlay.yml. Keep the two in sync when
+// the runtime catalog changes; DSH_MODELS overrides it without a rebuild.
+const defaultDshModelsJSON = `[{"id":"deepseek-flash","name":"DeepSeek-V4.1-Flash"},{"id":"deepseek-v4-pro","name":"DeepSeek-V4-Pro"}]`
+
+// parseDshModels reads DSH_MODELS as the same JSON the chart renders. An
+// unparsable or empty value falls back to the built-in catalog rather than
+// leaving the picker empty.
+func parseDshModels(raw string) []DshModel {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = defaultDshModelsJSON
+	}
+	var models []DshModel
+	if err := json.Unmarshal([]byte(raw), &models); err != nil {
+		models = nil
+	}
+	seen := make(map[string]struct{}, len(models))
+	result := make([]DshModel, 0, len(models))
+	for _, model := range models {
+		id := strings.TrimSpace(model.ID)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		name := strings.TrimSpace(model.Name)
+		if name == "" {
+			name = id
+		}
+		result = append(result, DshModel{ID: id, Name: name})
+	}
+	if len(result) > 0 {
+		return result
+	}
+	var fallback []DshModel
+	_ = json.Unmarshal([]byte(defaultDshModelsJSON), &fallback)
+	return fallback
+}
+
+// DshModelAllowed reports whether id is in the configured catalog.
+func (c *Config) DshModelAllowed(id string) bool {
+	for _, model := range c.DshModels {
+		if model.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func daysEnv(key string, fallback int) time.Duration {
 	return time.Duration(intEnv(key, fallback)) * 24 * time.Hour
+}
+
+// daysOrDisabledEnv reads a day count where an explicit 0 disables the rule
+// instead of falling back to the default.
+func daysOrDisabledEnv(key string, fallback int) time.Duration {
+	days := zeroOKIntEnv(key, fallback)
+	if days == 0 {
+		return 0
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
+// zeroOKIntEnv is intEnv with zero accepted as a meaningful "disabled" value.
+func zeroOKIntEnv(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 0 {
+		return fallback
+	}
+	return v
 }
 
 // overviewNamespace returns the namespace holding model overview ConfigMaps.

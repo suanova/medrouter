@@ -1,0 +1,38 @@
+{{- if .Values.dsh.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "medrouter.dshName" . }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dsh
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "medrouter.selectorLabels" (dict "root" . "component" "dsh") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.dsh.service.port }}
+      targetPort: http
+      protocol: TCP
+---
+# Headless variant. MedRouter resolves its A records and routes a user id to
+# one pod, because dsh-api keeps tasks and live agents in process memory.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "medrouter.dshHeadlessName" . }}
+  labels:
+    {{- include "medrouter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dsh
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "medrouter.selectorLabels" (dict "root" . "component" "dsh") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.dsh.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

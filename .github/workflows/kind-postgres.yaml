@@ -66,6 +66,73 @@ jobs:
             exit 1
           fi
 
+      - name: Test the bundled DSH plugins
+        run: |
+          node --test images/dsh/plugins/dsh-api/test/isolation.test.mjs
+          node --test images/dsh/plugins/medrouter-skills/test/skills.test.mjs
+
+      - name: Render the DSH agent runtime
+        run: |
+          set -euo pipefail
+          # Disabled by default: no DSH objects, and the page reports it off.
+          helm template medrouter helm/medrouter-chart > /tmp/no-dsh.yaml
+          grep -q 'DSH_ENABLED: "false"' /tmp/no-dsh.yaml
+          if grep -q "medrouter-dsh" /tmp/no-dsh.yaml; then
+            echo "DSH resources must not render when dsh.enabled=false"
+            exit 1
+          fi
+
+          helm template medrouter helm/medrouter-chart \
+            --set dsh.enabled=true \
+            --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.image.tag=test > /tmp/dsh.yaml
+          grep -q "name: medrouter-dsh$" /tmp/dsh.yaml
+          grep -q 'DSH_ENABLED: "true"' /tmp/dsh.yaml
+          grep -q "DSH_HEADLESS_HOST" /tmp/dsh.yaml
+          # Master-only placement and the shared RWX volume by default.
+          grep -q "node-role.kubernetes.io/control-plane" /tmp/dsh.yaml
+          grep -q "ReadWriteMany" /tmp/dsh.yaml
+          grep -q "mountPath: /data/dsh" /tmp/dsh.yaml
+          if grep -q "kind: HorizontalPodAutoscaler" /tmp/dsh.yaml; then
+            echo "HPA must not render unless dsh.autoscaling.enabled=true"
+            exit 1
+          fi
+
+          helm template medrouter helm/medrouter-chart \
+            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.autoscaling.enabled=true \
+            --set dsh.autoscaling.minReplicas=2 \
+            --set dsh.autoscaling.maxReplicas=3 > /tmp/dsh-hpa.yaml
+          grep -q "kind: HorizontalPodAutoscaler" /tmp/dsh-hpa.yaml
+          grep -q "kind: PodDisruptionBudget" /tmp/dsh-hpa.yaml
+
+          # The picker needs a catalog; a missing model key must fail at render time.
+          if helm template medrouter helm/medrouter-chart \
+            --set dsh.enabled=true >/dev/null 2>&1; then
+            echo "dsh.enabled=true without secrets.DSH_DEEPSEEK_API_KEY must fail"
+            exit 1
+          fi
+          if helm template medrouter helm/medrouter-chart \
+            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set 'dsh.llm.models={}' >/dev/null 2>&1; then
+            echo "dsh.enabled=true without dsh.llm.models must fail"
+            exit 1
+          fi
+
+          # Uploads can be turned off; without them a ReadWriteOnce volume is
+          # enough for a single replica, but never for several.
+          helm template medrouter helm/medrouter-chart \
+            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.uploads.enabled=false \
+            --set 'dsh.persistence.accessModes={ReadWriteOnce}' > /tmp/dsh-rwo.yaml
+          if helm template medrouter helm/medrouter-chart \
+            --set dsh.enabled=true --set secrets.DSH_DEEPSEEK_API_KEY=test-key \
+            --set dsh.replicaCount=2 \
+            --set 'dsh.persistence.accessModes={ReadWriteOnce}' >/dev/null 2>&1; then
+            echo "multi-replica dsh with ReadWriteOnce must fail"
+            exit 1
+          fi
+
       - name: Render the Gateway root redirect
         run: |
           set -euo pipefail
