@@ -86,7 +86,7 @@ data:
   DSH_DEFAULT_PRESET: {{ .Values.dsh.agent.defaultPreset | quote }}
   DSH_REQUEST_TIMEOUT_SECONDS: {{ .Values.dsh.requestTimeoutSeconds | quote }}
   DSH_MAX_PROMPT_CHARS: {{ .Values.dsh.maxPromptChars | quote }}
-  DSH_MODELS: {{ .Values.dsh.llm.models | toJson | quote }}
+  DSH_PROVIDER_PREFIX: {{ .Values.dsh.providerPrefix | quote }}
   {{- if .Values.dsh.uploads.enabled }}
   DSH_UPLOAD_ROOT: "/data/dsh"
   DSH_UPLOAD_MOUNT: {{ .Values.dsh.uploads.mount | quote }}

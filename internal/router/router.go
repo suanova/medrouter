@@ -59,6 +59,11 @@ func New(d Deps) *gin.Engine {
 	api.POST("/verification/send", d.Verification.Send)
 	api.GET("/oauth/:provider/start", d.OAuth.Start)
 	api.GET("/oauth/:provider/callback", d.OAuth.Callback)
+	// The dsh container fetches its startup model catalog here with the shared
+	// DSH_API_KEY; browsers never call it.
+	if d.Chat != nil {
+		api.GET("/chat/runtime/models", d.Chat.RuntimeModels)
+	}
 
 	protected := api.Group("")
 	protected.Use(middleware.RequireAuth(d.Sessions))

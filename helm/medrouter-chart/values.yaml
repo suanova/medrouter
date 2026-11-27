@@ -270,22 +270,20 @@ dsh:
     maxConcurrent: 8
     maxArtifactBytes: 67108864
 
+  # The Chat page offers only inference services the user deployed through
+  # Studio. The dsh container asks MedRouter for the running set at startup and
+  # builds one pi-ai route per service; the request body's model field is the
+  # service name, which the private AI gateway routes on.
   llm:
-    # OpenAI-compatible endpoint for the DeepSeek adapter. Empty uses the
-    # official DeepSeek API; point it at a platform gateway to bill model calls
-    # there instead.
-    baseURL: ""
-    # Turn off the vision review loop (each Office revision is rendered and
-    # inspected with read_image). "off" saves minutes per deck.
-    imageInput: "on"
-    # Models offered by the Chat page's picker. The ids must match the models
-    # declared in images/dsh/overlay.yml (llm-deepseek.models); the first entry
-    # is the default.
-    models:
-      - id: deepseek-flash
-        name: DeepSeek-V4.1-Flash
-      - id: deepseek-v4-pro
-        name: DeepSeek-V4-Pro
+    # Cluster-internal AI gateway that fronts every InferenceService.
+    baseURL: http://cubestack-ai-private.envoy-gateway-system.svc.cluster.local/v1
+    # The platform does not publish per-model context metadata; these are the
+    # route defaults the agent uses for budgeting and compaction.
+    contextWindow: 32768
+    maxTokens: 8192
+  # Prefix for the generated pi-ai provider ids (provider = prefix + service
+  # name). MedRouter and the dsh container must agree, so one value feeds both.
+  providerPrefix: "mr-"
 
   # Attachments are written by MedRouter into the shared volume and read by
   # the agent at uploads.mount. Requires persistence with ReadWriteMany.
@@ -517,12 +515,10 @@ secrets:
   GOOGLE_CLIENT_SECRET: ""
   OIDC_CLIENT_SECRET: ""
   INITIAL_ADMIN_PASSWORD: ""
-  # Shared secret between MedRouter and dsh-api. Generated when empty and
-  # secret.create=true, and reused across upgrades via lookup.
+  # Shared secret between MedRouter, dsh-api and the internal model-catalog
+  # endpoint. Generated when empty and secret.create=true, and reused across
+  # upgrades via lookup.
   DSH_API_KEY: ""
-  # Model credential for the dsh pod. Required when dsh.enabled=true; the key
-  # never reaches MedRouter or the browser.
-  DSH_DEEPSEEK_API_KEY: ""
 
 # ---------------------------------------------------------------------------
 # Service / Ingress

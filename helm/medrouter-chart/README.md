@@ -303,9 +303,9 @@ secret:
 | `SMTP_PASSWORD` | 使用 SMTP 时 |
 | `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_SECRET` / `OIDC_CLIENT_SECRET` | 对应 OAuth 提供商 |
 | `INITIAL_ADMIN_PASSWORD` | 使用初始化管理员时 |
-| `DSH_API_KEY` / `DSH_DEEPSEEK_API_KEY` | `dsh.enabled=true` 时（两个都需要） |
+| `DSH_API_KEY` | `dsh.enabled=true` 时 |
 
-其余 key 可省略。Deployment 对可选 key 使用 `optional: true`；DSH 的两个 key 是必需的，缺失时 Pod 会停在 `CreateContainerConfigError`。托管 PostgreSQL 模式下 `SQL_DSN` 由 Chart 自己生成，不需要放进外部 Secret。`secret.create=true` 时 `DSH_API_KEY` 自动生成，`DSH_DEEPSEEK_API_KEY` 必须显式提供。
+其余 key 可省略。Deployment 对可选 key 使用 `optional: true`；`DSH_API_KEY` 在 `dsh.enabled=true` 时必需，缺失时 Pod 会停在 `CreateContainerConfigError`。托管 PostgreSQL 模式下 `SQL_DSN` 由 Chart 自己生成，不需要放进外部 Secret。`secret.create=true` 时 `DSH_API_KEY` 自动生成。
 
 ## 模型库、数据集库与 RBAC
 
@@ -454,13 +454,30 @@ openpyxl）与 `medrouter-skills`（演示文稿设计、医学课件、医学�
 ```bash
 helm upgrade --install medrouter ./helm/medrouter-chart -n medrouter --create-namespace \
   --set dsh.enabled=true \
-  --set secrets.DSH_DEEPSEEK_API_KEY=sk-... \
   --set dsh.persistence.storageClassName=<支持 RWX 的 StorageClass>
 ```
 
-- `secrets.DSH_DEEPSEEK_API_KEY` 只在 dsh Pod 内使用，MedRouter 与浏览器都拿不到。
-- `secrets.DSH_API_KEY` 留空时自动生成，MedRouter 与 dsh-api 共用，跨升级保持稳定。
+- 对话页只列出调用者**自己部署且运行中**的推理服务；没有时页面提示去 Studio 部署。
+- 不需要模型 API Key：dsh 调用的是集群内私有 AI 网关（`dsh.llm.baseURL`），由平台按推理服务路由。
+- `secrets.DSH_API_KEY` 留空时自动生成，MedRouter、dsh-api 与内部模型目录接口共用，跨升级保持稳定。
+- MedRouter 需要 Chart 创建的 Role（只允许 get/patch dsh Deployment），用于模型集合变化时滚动 dsh。
 - `dsh.image.repository` / `tag` 指向你推送的镜像；默认 `latest`，生产环境建议固定到 `sha-*` 或版本 tag。
+
+### 模型来源与刷新
+
+- 用户在 Studio 部署模型后，`InferenceService` 就绪，workspace 的 `phase` 变为 `running`。
+- 对话页的模型下拉 = 当前用户 `running` 的推理服务；显示 `ModelVersion` 名称，提交的 id 是服务名（如 `biomistral-7b-u3-svc`）。
+- dsh 容器启动时调用 MedRouter 的 `/api/chat/runtime/models`（`Authorization: Bearer $DSH_API_KEY`）拿到**全部** running 服务，为每个服务生成一条 pi-ai 路由：
+  - provider id = `dsh.providerPrefix` + 服务名（默认 `mr-<服务名>`）
+  - model id = 服务名
+  - `baseURL` = `dsh.llm.baseURL`，请求体里的 `model` 就是服务名；私有 AI 网关的
+    ext_proc 会据此设置 `x-ai-eg-model` 并选中后端，客户端不需要自己加头
+- 新增、删除或停止推理服务时，MedRouter 的 reconciler 计算运行集合哈希；变化时 patch dsh Deployment 的 pod-template annotation
+  `medrouter.io/dsh-model-catalog`，触发滚动重启并重新生成目录。**滚动会中断在途任务**。
+- 平台目前没有每模型的 context window 元数据，统一使用 `dsh.llm.contextWindow` 与 `dsh.llm.maxTokens`。
+- 部署的模型必须通过 AI 网关提供 OpenAI 兼容的 `chat/completions`，并且支持 tool
+  calling（vLLM/SGLang 需要在 runtime profile 里开启对应的 tool parser）；否则智能体
+  可以回答，但无法调用工具或产出文件。
 
 ### 调度：只跑在 master
 
@@ -517,9 +534,10 @@ dsh-api 的任务表与运行中的 agent 在**进程内存**里，会话与工�
 
 | 值 | 默认 | 说明 |
 |---|---|---|
-| `dsh.llm.baseURL` | 空 | DeepSeek 官方端点；可指向任意 OpenAI 兼容网关 |
-| `dsh.llm.models` | `deepseek-flash` / `deepseek-v4-pro` | 对话页模型下拉的目录；id 必须与 `overlay.yml` 的模型一致，第一项为默认 |
-| `dsh.llm.imageInput` | `on` | 设为 `off` 关闭 Office 渲染后看图质检（更快） |
+| `dsh.llm.baseURL` | 私有 AI 网关 `/v1` 地址 | 每个推理服务的 OpenAI 兼容端点入口 |
+| `dsh.llm.contextWindow` | `32768` | 未提供模型元数据时的上下文窗口 |
+| `dsh.llm.maxTokens` | `8192` | 未提供模型元数据时的输出上限 |
+| `dsh.providerPrefix` | `mr-` | 生成的 pi-ai provider id 前缀 |
 | `dsh.agent.defaultPreset` | `standard` | 默认预设；包含 bash、文件编辑与 Office 技能 |
 | `dsh.agent.defaultTimeoutSeconds` | `1200` | 单轮预算 |
 | `dsh.agent.maxTimeoutSeconds` | `7200` | 单轮硬上限 |
@@ -531,8 +549,8 @@ dsh-api 的任务表与运行中的 agent 在**进程内存**里，会话与工�
 
 - 对话历史保存在**浏览器 localStorage**（按用户 id 分组），服务端只保存 dsh 的
   会话与工作区；换浏览器看不到历史消息，但输入会话 id 仍可续接。
-- 模型下拉来自 `dsh.llm.models`；同一会话内可以换模型（dsh 会插入一条模型切换
-  提示）。预设（工具集）在会话开始后锁定，换预设需新建对话。
+- 模型下拉来自当前用户运行中的推理服务；同一会话内可以换模型（dsh 会插入一条
+  模型切换提示）。预设（工具集）在会话开始后锁定，换预设需新建对话。
 - 「停止」只是请求 dsh 中止当前轮次并停止本地轮询，不会重新提交任务。
 - 产物通过 MedRouter 同源代理下载（`/api/chat/tasks/:id/files/:key`），dsh 不需要
   暴露到集群外。
@@ -590,8 +608,8 @@ dsh-api 的任务表与运行中的 agent 在**进程内存**里，会话与工�
 | `dsh.persistence.size` / `storageClassName` | `20Gi` / 空 | DSH 数据卷 |
 | `dsh.uploads.enabled` | `true` | 对话附件上传（需要共享卷） |
 | `dsh.agent.defaultPreset` | `standard` | 默认预设 |
-| `dsh.llm.models` | 两个 DeepSeek 模型 | 对话页可选模型；第一项为默认 |
-| `secrets.DSH_DEEPSEEK_API_KEY` | 空（`dsh.enabled=true` 时必填） | dsh Pod 使用的模型密钥 |
+| `dsh.llm.baseURL` | 私有 AI 网关 `/v1` | 部署模型的 OpenAI 兼容入口 |
+| `dsh.providerPrefix` | `mr-` | pi-ai provider id 前缀 |
 | `secrets.DSH_API_KEY` | 空（自动生成） | MedRouter 与 dsh-api 的共享密钥 |
 | `ingress.enabled` | `false` | 是否创建 Ingress |
 | `gateway.enabled` | `true` | 是否创建 Gateway API HTTPRoute（CubeStack 平台） |
@@ -632,7 +650,7 @@ Chart 在渲染阶段会拒绝以下配置：
 - `config.extra` 覆盖 Chart 管理的保留键
 - 开启模型库或数据集库 RBAC 但没有可用的 ServiceAccount
 - `modelLibrary.*` 或 `datasetLibrary.*` 的 `cacheTTLSeconds` / `requestTimeoutSeconds` 小于 1
-- `dsh.enabled=true` 但镜像仓库为空、`secrets.DSH_DEEPSEEK_API_KEY` 为空（`secret.create=true` 时）
+- `dsh.enabled=true` 但镜像仓库为空、`dsh.llm.baseURL` 不是 http(s) 地址、`contextWindow`/`maxTokens` 非正、`providerPrefix` 非法，或没有可用的 ServiceAccount
 - `dsh.autoscaling.enabled=true` 但没有任何指标，或 `maxReplicas < minReplicas`
 - dsh 多副本或 `dsh.uploads.enabled=true` 但数据卷不包含 `ReadWriteMany`
 - `dsh.uploads.enabled=true` 但未启用持久化

@@ -74,15 +74,18 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: DSH_API_KEY
-            - name: DEEPSEEK_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: DSH_DEEPSEEK_API_KEY
             - name: DSH_LLM_BASE_URL
               value: {{ .Values.dsh.llm.baseURL | quote }}
-            - name: DSH_IMAGE_INPUT
-              value: {{ .Values.dsh.llm.imageInput | quote }}
+            - name: DSH_LLM_CONTEXT_WINDOW
+              value: {{ .Values.dsh.llm.contextWindow | quote }}
+            - name: DSH_LLM_MAX_TOKENS
+              value: {{ .Values.dsh.llm.maxTokens | quote }}
+            - name: DSH_MODEL_PROVIDER_PREFIX
+              value: {{ .Values.dsh.providerPrefix | quote }}
+            # The container asks MedRouter for the running inference services and
+            # turns each one into a pi-ai route before dsh starts.
+            - name: MEDROUTER_MODELS_URL
+              value: {{ printf "http://%s:%v%s/chat/runtime/models" (include "medrouter.fullname" .) .Values.service.port (include "medrouter.apiPath" .) | quote }}
             - name: DSH_DEFAULT_PRESET
               value: {{ .Values.dsh.agent.defaultPreset | quote }}
             - name: DSH_DEFAULT_TIMEOUT_MS

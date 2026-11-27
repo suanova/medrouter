@@ -34,16 +34,103 @@ fi
 
 # dsh 0.2.2 起拒绝 0.0.0.0 等通配地址，只接受具体网卡的 IP 字面量。容器内取
 # 第一个非回环 IPv4（即 eth0），并通过 DSH_BIND_HOST 交给 overlay.yml；同时把
-# 它写到文件里，供 compose healthcheck 探活。
+# 它写到文件里，供健康检查探活。
 if [ -z "${DSH_BIND_HOST:-}" ]; then
     DSH_BIND_HOST=$(node -e 'const n = require("node:os").networkInterfaces(); for (const list of Object.values(n)) for (const a of list || []) if (a.family === "IPv4" && !a.internal) { process.stdout.write(a.address); process.exit(0) } process.exit(1)') || DSH_BIND_HOST=127.0.0.1
     export DSH_BIND_HOST
 fi
 printf '%s\n' "$DSH_BIND_HOST" > /tmp/dsh-bind-host
 
+# 模型目录：DSH 只服务用户自己部署的推理服务。MedRouter 提供运行中的服务列表，
+# 这里为每个服务生成一条 pi-ai 的 openai-completions 路由；请求体里的 model 就是
+# 服务名，私有 AI 网关据此选中后端模型（客户端不需要自己加路由头）。文件随容器
+# 启动生成；服务集合变化时 MedRouter 会给 Deployment 打 annotation 触发滚动重启，
+# 从而重新拉取。
+MODELS_FILE="$DSH_HOME/runtime-models.yml"
+export DSH_LLM_BASE_URL="${DSH_LLM_BASE_URL:-http://cubestack-ai-private.envoy-gateway-system.svc.cluster.local/v1}"
+export DSH_LLM_CONTEXT_WINDOW="${DSH_LLM_CONTEXT_WINDOW:-32768}"
+export DSH_LLM_MAX_TOKENS="${DSH_LLM_MAX_TOKENS:-8192}"
+python3 - "$MODELS_FILE" <<'PY'
+import json
+import os
+import sys
+import time
+import urllib.request
+
+path = sys.argv[1]
+url = os.environ.get("MEDROUTER_MODELS_URL", "")
+key = os.environ.get("DSH_API_KEY", "")
+base_url = os.environ.get("DSH_LLM_BASE_URL", "")
+prefix = os.environ.get("DSH_MODEL_PROVIDER_PREFIX", "mr-")
+try:
+    context_window = int(os.environ.get("DSH_LLM_CONTEXT_WINDOW", "32768"))
+    max_tokens = int(os.environ.get("DSH_LLM_MAX_TOKENS", "8192"))
+except ValueError:
+    context_window, max_tokens = 32768, 8192
+
+def fetch_models():
+    request = urllib.request.Request(
+        url,
+        headers={"Authorization": "Bearer " + key, "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        payload = json.load(response)
+    return payload.get("data", {}).get("models", [])
+
+models = []
+if url:
+    for attempt in range(30):
+        try:
+            models = fetch_models()
+            break
+        except Exception as exc:  # noqa: BLE001 - any failure means retry
+            print(f"dsh: model catalog fetch failed ({attempt + 1}/30): {exc}", file=sys.stderr)
+            time.sleep(2)
+
+quote = json.dumps
+lines = [
+    "# Generated at container start from MedRouter's running inference services.",
+    "- insert:",
+    "    - id: llm-pi-ai",
+    "      name: '@deepseek-ai/dsh-llm-pi-ai'",
+    "      config:",
+]
+routes = []
+for entry in models:
+    name = str(entry.get("id") or "").strip()
+    if not name:
+        continue
+    display = str(entry.get("name") or name).strip() or name
+    provider = prefix + name
+    routes += [
+        f"          {quote(provider)}:",
+        f"            displayName: {quote(display)}",
+        "            api: openai-completions",
+        f"            baseURL: {quote(base_url)}",
+        "            apiKeyEnv: DSH_API_KEY",
+        f"            defaultContextWindow: {context_window}",
+        f"            defaultMaxTokens: {max_tokens}",
+        "            models:",
+        f"              - id: {quote(name)}",
+        f"                name: {quote(display)}",
+        f"                contextWindow: {context_window}",
+        f"                maxTokens: {max_tokens}",
+    ]
+if routes:
+    lines.append("        providers:")
+    lines += routes
+else:
+    lines.append("        providers: {}")
+
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write("\n".join(lines) + "\n")
+print(f"dsh: wrote {len(models)} model route(s) to {path}", file=sys.stderr)
+PY
+
 # 启动器自己的选项（--patch）必须排在应用参数之前：解析器遇到第一个不认识的
-# 参数后，其余全部原样交给 web 应用（--no-open 等）。
-set -- web --patch /opt/dsh/overlay.yml --no-open
+# 参数后，其余全部原样交给 web 应用（--no-open 等）。第二个 patch 是刚生成的
+# 模型目录。
+set -- web --patch /opt/dsh/overlay.yml --patch "$MODELS_FILE" --no-open
 
 # 通过非 loopback 主机名访问 Web UI 时，浏览器信任栅栏要求显式声明该 authority
 # （空格分隔的 host 或 host:port 列表）。

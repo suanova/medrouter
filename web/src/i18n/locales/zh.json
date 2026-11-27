@@ -1031,7 +1031,9 @@
     "uploadFailed": "上传失败",
     "presetLocked": "预设只能在会话开始时选择；换预设请新建对话。",
     "model": "模型",
-    "promptTooLong": "消息最多 {{max}} 个字符。"
+    "promptTooLong": "消息最多 {{max}} 个字符。",
+    "noModelsText": "还没有运行中的推理服务：先在 Studio 部署一个模型，再回到这里对话。",
+    "goStudio": "去 Studio 部署"
   },
   "Chat": "对话"
 }

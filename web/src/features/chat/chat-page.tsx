@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,7 +28,8 @@ export function ChatPage() {
   const status = statusQuery.data
   const defaultPreset = status?.default_preset || 'standard'
   const models = status?.models ?? []
-  const defaultModel = status?.default_model || models[0]?.id || 'deepseek-flash'
+  const defaultModel = status?.default_model || models[0]?.id || ''
+  const hasModels = models.length > 0
 
   const {
     conversations,
@@ -46,16 +48,23 @@ export function ChatPage() {
     activeConversation?.turns.some((turn) => turn.state === 'running')
   )
 
-  // Conversations saved before the model picker existed have no model; adopt
-  // the server default once it is known so the picker and the submit agree.
+  // Keep the conversation's model usable: adopt the default when none is set
+  // (records written before the picker existed) and move off a deployment that
+  // is no longer running.
   useEffect(() => {
-    if (activeConversation && !activeConversation.model && defaultModel) {
-      updateConversation(activeConversation.id, (conversation) => ({
-        ...conversation,
-        model: defaultModel,
-      }))
+    if (!activeConversation || !defaultModel) {
+      return
     }
-  }, [activeConversation, defaultModel, updateConversation])
+    const current = activeConversation.model
+    const stillRunning = models.some((option) => option.id === current)
+    if (current && stillRunning) {
+      return
+    }
+    updateConversation(activeConversation.id, (conversation) => ({
+      ...conversation,
+      model: defaultModel,
+    }))
+  }, [activeConversation, defaultModel, models, updateConversation])
 
   const handleCreate = useCallback(() => {
     // Do not stack empty conversations: pressing "new" on a blank one is a
@@ -135,6 +144,17 @@ export function ChatPage() {
               {t('chat.disabledText')}
             </div>
           ) : null}
+          {status && enabled && !hasModels ? (
+            <div className='chat-banner is-warning' role='status'>
+              <AlertTriangle aria-hidden='true' />
+              <span>
+                {t('chat.noModelsText')}{' '}
+                <Link to='/studio' className='chat-banner-link'>
+                  {t('chat.goStudio')}
+                </Link>
+              </span>
+            </div>
+          ) : null}
 
           <div className='chat-shell'>
             <ConversationList
@@ -154,7 +174,7 @@ export function ChatPage() {
               </div>
               <ChatThread conversation={activeConversation} enabled={enabled} />
               <ChatComposer
-                disabled={!enabled || statusQuery.isPending}
+                disabled={!enabled || statusQuery.isPending || !hasModels}
                 sending={sending}
                 canceling={canceling}
                 running={running}

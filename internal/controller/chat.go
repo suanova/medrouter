@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -36,18 +37,32 @@ func NewChatController(cfg *config.Config, dsh *service.DshClient) *ChatControll
 	return &ChatController{cfg: cfg, dsh: dsh}
 }
 
-// Status reports whether the page can be used and what it supports.
+// Status reports whether the page can be used and which models the caller can
+// run the agent on: only their own running inference deployments.
 func (cc *ChatController) Status(c *gin.Context) {
 	enabled := cc.cfg.DshEnabled && cc.dsh != nil && cc.dsh.Enabled()
+	var models []service.AgentModel
+	if user := middleware.CurrentUser(c); user != nil {
+		found, err := service.ListRunningInferenceModels(user.ID)
+		if err != nil {
+			log.Printf("chat: list models for user %d: %v", user.ID, err)
+		} else {
+			models = found
+		}
+	}
+	options := make([]gin.H, 0, len(models))
+	for _, agentModel := range models {
+		options = append(options, gin.H{"id": agentModel.ID, "name": agentModel.Name})
+	}
 	defaultModel := ""
-	if len(cc.cfg.DshModels) > 0 {
-		defaultModel = cc.cfg.DshModels[0].ID
+	if len(models) > 0 {
+		defaultModel = models[0].ID
 	}
 	payload := gin.H{
 		"enabled":          enabled,
 		"default_preset":   cc.cfg.DshDefaultPreset,
 		"max_prompt_chars": cc.cfg.DshMaxPromptChars,
-		"models":           cc.cfg.DshModels,
+		"models":           options,
 		"default_model":    defaultModel,
 		"uploads": gin.H{
 			"enabled":   enabled && cc.cfg.DshUploadsEnabled(),
@@ -57,6 +72,29 @@ func (cc *ChatController) Status(c *gin.Context) {
 		},
 	}
 	common.Success(c, payload)
+}
+
+// RuntimeModels feeds the dsh container's startup catalog. It is not a browser
+// endpoint: the dsh pod authenticates with the shared DSH_API_KEY and receives
+// every running deployment (the runtime serves all accounts; the Chat page
+// filters per user).
+func (cc *ChatController) RuntimeModels(c *gin.Context) {
+	token := strings.TrimSpace(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer "))
+	if cc.cfg.DshAPIKey == "" || subtle.ConstantTimeCompare([]byte(token), []byte(cc.cfg.DshAPIKey)) != 1 {
+		common.AbortFail(c, common.NewAPIErrorStatus(http.StatusUnauthorized, "UNAUTHORIZED", "Invalid runtime token"))
+		return
+	}
+	models, err := service.ListRunningInferenceModels(0)
+	if err != nil {
+		log.Printf("chat: list runtime models: %v", err)
+		common.Fail(c, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	options := make([]gin.H, 0, len(models))
+	for _, agentModel := range models {
+		options = append(options, gin.H{"id": agentModel.ID, "name": agentModel.Name})
+	}
+	common.Success(c, gin.H{"models": options})
 }
 
 type chatSubmitRequest struct {
@@ -116,9 +154,22 @@ func (cc *ChatController) Submit(c *gin.Context) {
 	if preset == "" {
 		preset = cc.cfg.DshDefaultPreset
 	}
+	// The model must be one of the caller's running inference deployments; the
+	// gateway would otherwise happily serve another account's endpoint.
 	model := strings.TrimSpace(req.Model)
-	if model != "" && !cc.cfg.DshModelAllowed(model) {
-		common.Fail(c, common.NewAPIError("INVALID_REQUEST", "Unknown model"))
+	if model == "" {
+		common.Fail(c, common.NewAPIError("INVALID_REQUEST", "Select a deployed model"))
+		return
+	}
+	allowed, allowErr := service.UserCanUseAgentModel(user.ID, model)
+	if allowErr != nil {
+		log.Printf("chat: check model for user %d: %v", user.ID, allowErr)
+		common.Fail(c, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error"))
+		return
+	}
+	if !allowed {
+		common.Fail(c, common.NewAPIError("MODEL_NOT_AVAILABLE",
+			"That model is not one of your running deployments"))
 		return
 	}
 	task, err := cc.dsh.Submit(c.Request.Context(), user.ID, service.DshSubmitInput{
@@ -126,6 +177,7 @@ func (cc *ChatController) Submit(c *gin.Context) {
 		SessionID:   req.SessionID,
 		Preset:      preset,
 		Model:       model,
+		Provider:    cc.cfg.DshProviderPrefix + model,
 		Attachments: attachments,
 	})
 	if err != nil {

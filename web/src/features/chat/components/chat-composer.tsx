@@ -249,8 +249,8 @@ export function ChatComposer({
                 aria-label={t('chat.model')}
               >
                 {models.map((option) => (
-                  <option key={option.id} value={option.id} title={option.name}>
-                    {option.id}
+                  <option key={option.id} value={option.id} title={option.id}>
+                    {option.name || option.id}
                   </option>
                 ))}
               </select>

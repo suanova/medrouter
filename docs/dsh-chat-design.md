@@ -62,9 +62,19 @@ dsh-api 的任务表和运行中的 agent 句柄在进程内存里。为了扩�
 
 ## 模型与预设
 
-- 模型由 dsh 的 DeepSeek 适配器提供（`overlay.yml` 的 `llm-deepseek.models`）。
-  MedRouter 通过 `DSH_MODELS`（Chart 的 `dsh.llm.models`）暴露同一组 id，提交时
-  作为 `model` 传给 dsh-api；不在目录内的 id 在网关就返回 400。
+- DSH 只服务用户在 Studio 部署的推理服务，不使用固定上游。dsh 容器启动时向
+  MedRouter 的 `/api/chat/runtime/models` 拉取全部 `running` 服务，为每个服务写一条
+  pi-ai `openai-completions` 路由；请求体里的 `model` 就是服务名，私有 AI 网关的
+  ext_proc 据此设置 `x-ai-eg-model` 并选中后端，客户端不需要自己加头。
+- 对话页只列出调用者自己的 running 服务；提交时后端再次校验归属与状态，然后
+  发送 `model=<服务名>`、`provider=mr-<服务名>`。其他用户、未运行或不存在的服务
+  返回 `MODEL_NOT_AVAILABLE`。
+- 推理服务集合变化时，MedRouter reconciler 计算哈希并 patch dsh Deployment 的
+  pod-template annotation，触发滚动重启；重启期间在途任务失败。没有 running
+  服务时页面提示去 Studio 部署。
+- 模型必须经 AI 网关提供 OpenAI 兼容的 `chat/completions` 且支持 tool calling
+  （vLLM/SGLang 需要在 runtime profile 中启用 tool parser），否则 agent 无法执行
+  工具、生成交付物。
 - 同一会话可以换模型，dsh 会在上下文里插入一条模型切换提示。
 - 预设（`standard` / `ptc`）决定工具集，会话开始后不能更换；页面在第一轮之后
   锁定下拉。
