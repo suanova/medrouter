@@ -1,0 +1,96 @@
+# DSH 容器运行时配置覆盖层。
+#
+# 由 `dsh web --patch /opt/dsh/overlay.yml` 加载：应用顺序为
+# dsh-base → dsh-web-app → profile 用户层 → 本文件，因此这里的值优先。
+#
+# 注意：`- id:` 行会整体替换该行的 config，所以下面把行内原有的键一并重述。
+
+# 1) 监听地址：dsh 0.2.2 起明确拒绝 0.0.0.0 等通配地址（避免把远程执行能力
+#    暴露到所有网卡），只接受本机某个具体网卡的 IPv4/IPv6 字面量。容器内默认的
+#    127.0.0.1 无法被发布的 3080 端口访问，因此由 entrypoint 解析容器网卡地址
+#    写进 DSH_BIND_HOST；单独运行时回落到 127.0.0.1。
+- id: webserver
+  config:
+    host: !!js process.env.DSH_BIND_HOST || '127.0.0.1'
+    port: 3080
+    compression: gzip
+    compressionLevel: 1
+    compressionThresholdBytes: 1024
+
+# 2) 模型端点：密钥由 DEEPSEEK_API_KEY 环境变量提供；DSH_LLM_BASE_URL 可把
+#    DeepSeek 适配器指向任意 OpenAI 兼容端点（例如平台自己的 /v1 网关）。
+#
+#    模型目录默认声明 deepseek-flash 支持图片输入，agent 每次渲染后都会 read_image
+#    看图改版；生成一份 10 页 PPT 大约多花 100 秒。DSH_IMAGE_INPUT=off 时目录里只
+#    声明文本输入，read_image 直接报错，agent 只做文本层面的结构检查（与不声明图片
+#    能力的 dsh 客户端行为一致）；默认 on 保持现有视觉质检。
+#    注意：这里整体替换 models，新增模型时要同步补进来。
+- id: llm-deepseek
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    baseURL: !!js process.env.DSH_LLM_BASE_URL || undefined
+    models:
+      - id: deepseek-flash
+        name: DeepSeek-V4.1-Flash
+        contextWindow: 1048576
+        # 表达式里的三元 ` : ` 会被 YAML 当成映射分隔符，所以整段加引号。
+        inputModalities: !!js "process.env.DSH_IMAGE_INPUT === 'off' ? ['text'] : ['text', 'image']"
+        systemPromptUpdate: in-history
+        toolUpdate: addition-only
+      - id: deepseek-v4-pro
+        name: DeepSeek-V4-Pro
+        description: Stronger agentic coding, knowledge, and difficult reasoning; suited to complex or quality-critical tasks at higher cost.
+        contextWindow: 1048576
+
+# 3) Office 技能：Word / PowerPoint / Excel 的创建、编辑与 OOXML 结构校验。
+#    对应 @deepseek-ai/dsh-skill-office 包内置的 office-docx / office-pptx /
+#    office-xlsx 三个技能，镜像里已安装 python-pptx / python-docx / openpyxl。
+- insert:
+    - id: skill-office
+      name: '@deepseek-ai/dsh-skill-office'
+
+# 3b) MedRouter 自带技能：医药/临床写作、临床试验口径、医学科普课件与演示文稿
+#     设计规范（slides-design / medical-slides / medical-writing /
+#     pharma-trials）。包本体在 /opt/dsh-plugins/medrouter-skills。
+- insert:
+    - id: medrouter-skills
+      name: medrouter-skills
+
+# 4) 沙箱写边界：dsh-api 用 fs 服务创建按用户的 workspace 目录；没有显式传策略
+#    时使用这里的 workspaceRoot。容器进程的 cwd 是 /，不钉住的话“工作区写”实际
+#    等于全盘可写。会话内的工具调用仍以各自会话的 cwd 作为 workspaceRoot。
+- id: sandbox-policy
+  config:
+    mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'
+    workspaceRoot: !!js process.env.DSH_WORKSPACE || '/data/workspace'
+
+# 5) 对外任务 API：MedRouter 的「对话」页面通过 /api/v1/tasks 提交任务、
+#    轮询结果并下载产物（含 /files/:key 下载路由）。
+#
+#    defaultPreset：请求没带 preset 时挂载的预设。不挂预设 dsh 只有读写工作目录
+#    的工具，模型会回答自己无法写文件或导出 PPT；standard 预设包含 bash/文件
+#    编辑和 Office 技能，是产出 PPT 等交付物的前提。
+#
+#    defaultCwd：MedRouter 会带上任务提交者的 userId，新任务的 cwd 变成
+#    <defaultCwd>/<userId>（不存在则预先创建）；不带 userId 的旧客户端仍用
+#    defaultCwd 本身。续会话始终沿用首轮 cwd，跨用户续会话返回 unknown_session。
+- insert:
+    - id: dsh-api
+      name: dsh-api
+      config:
+        apiKey: !!js process.env.DSH_API_KEY || ''
+        defaultCwd: !!js process.env.DSH_WORKSPACE || '/data/workspace'
+        # Every value below has the image default in the expression; the chart
+        # overrides it through the dsh.agent values.
+        defaultPreset: !!js process.env.DSH_DEFAULT_PRESET || 'standard'
+        defaultTimeoutMs: !!js Number(process.env.DSH_DEFAULT_TIMEOUT_MS) || 1200000
+        maxTimeoutMs: !!js Number(process.env.DSH_MAX_TIMEOUT_MS) || 7200000
+        # 任务经 HTTP 提交，没有人一定守在 Web UI 前回答 ask_user_question。
+        # 超时后按“用户跳过”结算，让模型带着缺失信息继续，避免任务一直挂着。
+        questionTimeoutMs: !!js Number(process.env.DSH_QUESTION_TIMEOUT_MS) || 600000
+        # 模型声明了图片输入时，Office 技能每改一版都会渲染再 read_image 看图。
+        # 这里限制单个任务最多看几次图，超出后拒绝并提示改用文本层面的结构检查；
+        # 0 表示不限制（保留完整视觉质检）。实测 10 页 PPT 约看 19 次图、多花 100 秒。
+        imageReviewLimit: !!js Number(process.env.DSH_IMAGE_REVIEW_LIMIT) || 0
+        maxConcurrent: !!js Number(process.env.DSH_MAX_CONCURRENT) || 8
+        maxArtifactBytes: !!js Number(process.env.DSH_MAX_ARTIFACT_BYTES) || 67108864

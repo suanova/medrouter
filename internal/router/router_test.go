@@ -125,6 +125,7 @@ func newTestApp(t *testing.T, mutate func(*config.Config)) *testApp {
 				service.NewDatasetCatalog(cfg, kube.DisabledSource),
 			),
 		),
+		Chat:     controller.NewChatController(cfg, service.NewDshClient(cfg)),
 		Sessions: sessions,
 	})
 	server := httptest.NewServer(engine)

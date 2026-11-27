@@ -38,6 +38,10 @@ var envKeys = []string{
 	"S3_DOWNLOAD_LARGE_THRESHOLD_BYTES", "S3_DOWNLOAD_LARGE_TTL_SECONDS",
 	"AWS_REGION", "AWS_DEFAULT_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
 	"AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE",
+	"DSH_ENABLED", "DSH_BASE_URL", "DSH_HEADLESS_HOST", "DSH_API_KEY",
+	"DSH_REQUEST_TIMEOUT_SECONDS", "DSH_DEFAULT_PRESET", "DSH_MAX_PROMPT_CHARS",
+	"DSH_UPLOAD_ROOT", "DSH_UPLOAD_MOUNT", "DSH_UPLOAD_MAX_BYTES", "DSH_UPLOAD_MAX_FILES",
+	"DSH_UPLOAD_RETENTION_DAYS", "DSH_UPLOAD_MAX_FILES_PER_USER", "DSH_MODELS",
 }
 
 func clearEnv(t *testing.T) {
@@ -111,6 +115,95 @@ func TestDatasetLibraryConfig(t *testing.T) {
 	}
 	if cfg.DatasetLibraryCacheTTL.Seconds() != 45 || cfg.DatasetLibraryTimeout.Seconds() != 8 {
 		t.Fatalf("dataset durations = %s/%s", cfg.DatasetLibraryCacheTTL, cfg.DatasetLibraryTimeout)
+	}
+}
+
+func TestDSHConfig(t *testing.T) {
+	clearEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DshEnabled || cfg.DshUploadsEnabled() {
+		t.Fatalf("dsh defaults = %+v", cfg)
+	}
+	if cfg.DshDefaultPreset != "standard" || cfg.DshUploadMaxBytes != 25<<20 || cfg.DshUploadMaxFiles != 10 {
+		t.Fatalf("dsh defaults = %+v", cfg)
+	}
+	if len(cfg.DshModels) != 2 || cfg.DshModels[0].ID != "deepseek-flash" || !cfg.DshModelAllowed("deepseek-v4-pro") {
+		t.Fatalf("dsh models = %+v", cfg.DshModels)
+	}
+
+	// The chart passes the picker catalog as JSON; an unparsable value must not
+	// leave the chat page without a model.
+	t.Setenv("DSH_MODELS", `[{"id":"custom-model","name":"Custom"}]`)
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.DshModels) != 1 || cfg.DshModels[0].ID != "custom-model" || cfg.DshModels[0].Name != "Custom" {
+		t.Fatalf("custom models = %+v", cfg.DshModels)
+	}
+	t.Setenv("DSH_MODELS", `not-json`)
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.DshModels) != 2 || cfg.DshModels[0].ID != "deepseek-flash" {
+		t.Fatalf("fallback models = %+v", cfg.DshModels)
+	}
+	t.Setenv("DSH_MODELS", "")
+
+	// Enabled without an address is a misconfiguration, not a disabled page.
+	t.Setenv("DSH_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected DSH_BASE_URL to be required")
+	}
+
+	t.Setenv("DSH_BASE_URL", "http://dsh.example:3080/")
+	t.Setenv("DSH_HEADLESS_HOST", "dsh-headless.example.svc:3080")
+	t.Setenv("DSH_DEFAULT_PRESET", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DshBaseURL != "http://dsh.example:3080" || cfg.DshHeadlessHost != "dsh-headless.example.svc:3080" {
+		t.Fatalf("dsh endpoints = %q / %q", cfg.DshBaseURL, cfg.DshHeadlessHost)
+	}
+	if cfg.DshDefaultPreset != "standard" {
+		t.Fatalf("empty preset should fall back to standard, got %q", cfg.DshDefaultPreset)
+	}
+
+	// Half an upload configuration would point the agent at a path it cannot
+	// read, so it is rejected rather than silently disabling uploads.
+	t.Setenv("DSH_UPLOAD_ROOT", "/data/dsh")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected DSH_UPLOAD_MOUNT to be required with DSH_UPLOAD_ROOT")
+	}
+	t.Setenv("DSH_UPLOAD_ROOT", "")
+	t.Setenv("DSH_UPLOAD_MOUNT", "/data/uploads")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected DSH_UPLOAD_ROOT to be required with DSH_UPLOAD_MOUNT")
+	}
+
+	t.Setenv("DSH_UPLOAD_ROOT", "relative/dsh")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected a relative DSH_UPLOAD_ROOT to be rejected")
+	}
+
+	t.Setenv("DSH_UPLOAD_ROOT", "/data/dsh")
+	t.Setenv("DSH_UPLOAD_MOUNT", "/data/uploads")
+	t.Setenv("DSH_UPLOAD_RETENTION_DAYS", "0")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.DshUploadsEnabled() {
+		t.Fatal("uploads should be enabled with both paths set")
+	}
+	if cfg.DshUploadRetention != 0 {
+		t.Fatalf("retention = %s, want disabled", cfg.DshUploadRetention)
 	}
 }
 

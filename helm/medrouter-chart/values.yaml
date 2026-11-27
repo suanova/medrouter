@@ -180,10 +180,151 @@ studio:
   rbac:
     create: true
 
+# ---------------------------------------------------------------------------
+# DSH agent runtime (the 对话 / Chat page)
+#
+# DeepSeek Harness (dsh) runs as a long-lived agent service behind the Chat
+# page. MedRouter authenticates the browser session and forwards each turn with
+# the user id, so one deployment serves every account while dsh keeps a
+# workspace and session history per user.
+#
+# The image is built from images/dsh in this repository. dsh-api keeps tasks
+# and live agents in memory and writes sessions to the data volume, so:
+#   * more than one replica needs ReadWriteMany storage (MedRouter hashes a
+#     user id to a pod; in-flight turns are still pod-local);
+#   * uploads need the same volume mounted in both pods (RWX required).
+#
+# Start with enabled: false; set it to true after creating the DeepSeek key.
+# ---------------------------------------------------------------------------
+dsh:
+  enabled: false
+
+  image:
+    # Built from images/dsh: `docker build -t medrouter-dsh:latest images/dsh`.
+    repository: harbor.isuanova.com/suanova/medrouter-dsh
+    # The DSH runtime versions independently of the app; CI publishes this tag
+    # for the default branch. Pin a sha-/v-prefixed tag for reproducible rollouts.
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Replicas when autoscaling is off. With autoscaling on this is only the
+  # initial count; the HPA owns the scale after the first reconcile.
+  replicaCount: 1
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    # A turn mostly waits on the model, so CPU is a coarse signal; raise the
+    # target or use queue depth (custom metrics) if scaling is too eager.
+    targetCPUUtilizationPercentage: 70
+    # Empty disables the memory metric; set e.g. 80 to add it.
+    targetMemoryUtilizationPercentage: ""
+    # Optional autoscaling/v2 behavior block, passed through verbatim.
+    behavior: {}
+
+  # Master-only placement. The chart selects control-plane-labelled nodes and
+  # tolerates the standard master taints. Override scheduling.nodeSelector for
+  # clusters that label masters differently (for example
+  # node-role.kubernetes.io/master).
+  scheduling:
+    masterOnly: true
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  service:
+    port: 3080
+
+  # MedRouter -> dsh-api HTTP call budget and prompt cap. Submits return as
+  # soon as the turn is queued, so this only needs to cover one API round trip.
+  requestTimeoutSeconds: 15
+  maxPromptChars: 100000
+
+  # One volume shared by the dsh pod (/data) and the MedRouter pod (/data/dsh).
+  # It holds DSH_HOME, per-user workspaces and uploaded attachments.
+  persistence:
+    enabled: true
+    # Use a pre-created claim instead of rendering one. It must be writable by
+    # the dsh image and, with uploads enabled, mountable by both pods (RWX).
+    existingClaim: ""
+    accessModes:
+      - ReadWriteMany
+    size: 20Gi
+    # Empty uses the cluster default StorageClass. Set this to a class that
+    # supports ReadWriteMany (CephFS/NFS/...); the chart cannot infer it.
+    storageClassName: ""
+    # Keep the volume when the release is uninstalled. Sessions, workspaces
+    # and uploads live here, so deleting it is a data-loss operation.
+    retain: true
+
+  # Per-task budgets. The overlay.yml in the image is the source of these
+  # defaults; the chart only renders what it overrides.
+  agent:
+    defaultPreset: standard
+    defaultTimeoutSeconds: 1200
+    maxTimeoutSeconds: 7200
+    questionTimeoutSeconds: 600
+    # 0 = unlimited render-and-inspect loop for Office previews.
+    imageReviewLimit: 0
+    maxConcurrent: 8
+    maxArtifactBytes: 67108864
+
+  llm:
+    # OpenAI-compatible endpoint for the DeepSeek adapter. Empty uses the
+    # official DeepSeek API; point it at a platform gateway to bill model calls
+    # there instead.
+    baseURL: ""
+    # Turn off the vision review loop (each Office revision is rendered and
+    # inspected with read_image). "off" saves minutes per deck.
+    imageInput: "on"
+    # Models offered by the Chat page's picker. The ids must match the models
+    # declared in images/dsh/overlay.yml (llm-deepseek.models); the first entry
+    # is the default.
+    models:
+      - id: deepseek-flash
+        name: DeepSeek-V4.1-Flash
+      - id: deepseek-v4-pro
+        name: DeepSeek-V4-Pro
+
+  # Attachments are written by MedRouter into the shared volume and read by
+  # the agent at uploads.mount. Requires persistence with ReadWriteMany.
+  uploads:
+    enabled: true
+    # The agent reads the whole file into context; keep this modest.
+    maxBytes: 26214400
+    maxFiles: 10
+    # Hourly sweep: files older than retentionDays and anything above
+    # maxFilesPerUser are removed. 0 disables the corresponding rule.
+    retentionDays: 7
+    maxFilesPerUser: 200
+    # Path the dsh container sees for the upload directory.
+    mount: /data/uploads
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  podAnnotations: {}
+  podLabels: {}
+
+  # The image runs as root (Node + dsh profile tooling); set a securityContext
+  # only after verifying the profile writes still work.
+  podSecurityContext: {}
+  securityContext: {}
+
+  # Only rendered when the effective minimum replica count is above 1.
+  pdb:
+    enabled: true
+    minAvailable: 1
+
 # Keep at 1 with SQLite: a SQLite file cannot be shared between pods. The
 # chart rejects replicaCount > 1 in SQLite mode. PostgreSQL modes can scale.
 replicaCount: 1
-
 # ---------------------------------------------------------------------------
 # Database
 #
@@ -376,6 +517,12 @@ secrets:
   GOOGLE_CLIENT_SECRET: ""
   OIDC_CLIENT_SECRET: ""
   INITIAL_ADMIN_PASSWORD: ""
+  # Shared secret between MedRouter and dsh-api. Generated when empty and
+  # secret.create=true, and reused across upgrades via lookup.
+  DSH_API_KEY: ""
+  # Model credential for the dsh pod. Required when dsh.enabled=true; the key
+  # never reaches MedRouter or the browser.
+  DSH_DEEPSEEK_API_KEY: ""
 
 # ---------------------------------------------------------------------------
 # Service / Ingress

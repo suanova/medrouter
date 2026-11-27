@@ -82,6 +82,12 @@ func main() {
 		WithDeployment(catalog.Artifact, catalog.Profiles)
 	studioController := controller.NewStudioController(service.NewFavoriteService(), workspaceService, finetuneService)
 
+	// The chat controller talks to the in-cluster dsh runtime. A disabled or
+	// unreachable runtime is reported by /api/chat/status and never prevents
+	// MedRouter from starting.
+	dshClient := service.NewDshClient(cfg)
+	chatController := controller.NewChatController(cfg, dshClient)
+
 	engine := router.New(router.Deps{
 		Config:       cfg,
 		Users:        userController,
@@ -91,6 +97,7 @@ func main() {
 		Models:       modelController,
 		Datasets:     datasetController,
 		Studio:       studioController,
+		Chat:         chatController,
 		Sessions:     sessions,
 		Static:       webDist,
 	})
@@ -102,6 +109,12 @@ func main() {
 	}
 	if workspaceCluster != nil {
 		go workspaceService.RunReconciler(reconcilerCtx)
+	}
+	if cfg.DshEnabled {
+		service.StartDshUploadCleanup(reconcilerCtx, cfg)
+		log.Printf("chat: dsh runtime at %s (uploads: %t)", cfg.DshBaseURL, cfg.DshUploadsEnabled())
+	} else {
+		log.Printf("chat: disabled")
 	}
 
 	if cfg.SessionSecret == config.DefaultDevSessionSecret {

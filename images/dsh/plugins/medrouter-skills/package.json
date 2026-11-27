@@ -1,0 +1,15 @@
+{
+  "name": "medrouter-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MedRouter skill provider: medical/pharmaceutical writing and presentation playbooks for the DeepSeek Harness.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "files": [
+    "lib/index.js",
+    "assets"
+  ]
+}

@@ -24,6 +24,7 @@ type Deps struct {
 	Models       *controller.ModelController
 	Datasets     *controller.DatasetController
 	Studio       *controller.StudioController
+	Chat         *controller.ChatController
 	Sessions     *service.SessionService
 	Static       fs.FS
 }
@@ -80,6 +81,31 @@ func New(d Deps) *gin.Engine {
 	protected.POST("/studio/workspaces/:id/:action", d.Studio.SetWorkspaceRunning)
 	protected.DELETE("/studio/workspaces/:id", d.Studio.DeleteWorkspace)
 	protected.GET("/studio/finetune/targets", d.Studio.FineTuneTargets)
+
+	// DeepSeek Harness agent behind the 对话 page. Every route forwards the
+	// authenticated user id to dsh-api, which scopes workspaces and sessions
+	// per account.
+	if d.Chat != nil {
+		protected.GET("/chat/status", d.Chat.Status)
+		protected.POST("/chat/tasks", d.Chat.Submit)
+		protected.GET("/chat/tasks/:id", d.Chat.Task)
+		protected.DELETE("/chat/tasks/:id", d.Chat.Cancel)
+		protected.GET("/chat/tasks/:id/files/:key", d.Chat.Artifact)
+
+		// Uploads are multipart and much larger than the JSON API body limit,
+		// so they get a dedicated group with the same origin and auth gates.
+		uploadLimit := d.Config.DshUploadMaxBytes + (1 << 20)
+		if uploadLimit <= 1<<20 {
+			uploadLimit = 1<<20 + 1
+		}
+		uploads := engine.Group(apiPrefix)
+		uploads.Use(
+			middleware.RequireSameOrigin(d.Config.PublicOrigin),
+			middleware.LimitUploadBody(uploadLimit),
+			middleware.RequireAuth(d.Sessions),
+		)
+		uploads.POST("/chat/uploads", d.Chat.Upload)
+	}
 
 	engine.GET(basePath+"/healthz", d.Status.Health)
 

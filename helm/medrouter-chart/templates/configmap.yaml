@@ -75,6 +75,27 @@ data:
   STUDIO_FINETUNE_DEADLINE_SECONDS: {{ .Values.studio.finetuneDeadlineSeconds | quote }}
   STUDIO_FINETUNE_MAX_SAMPLES: {{ .Values.studio.finetuneMaxSamples | quote }}
   STUDIO_AI_GATEWAY_ROUTER: {{ .Values.studio.gatewayRouter | quote }}
+  DSH_ENABLED: {{ .Values.dsh.enabled | quote }}
+  {{- if .Values.dsh.enabled }}
+  DSH_BASE_URL: {{ printf "http://%s:%v" (include "medrouter.dshName" .) .Values.dsh.service.port | quote }}
+  # Headless Service used to pin a user to one dsh pod: dsh-api keeps tasks and
+  # live agents in memory, so polling must reach the pod that saw the submit.
+  # Pod IPs are addressed on the container port (3080, fixed by the image),
+  # not the Service port.
+  DSH_HEADLESS_HOST: {{ printf "%s.%s.svc.cluster.local:3080" (include "medrouter.dshHeadlessName" .) .Release.Namespace | quote }}
+  DSH_DEFAULT_PRESET: {{ .Values.dsh.agent.defaultPreset | quote }}
+  DSH_REQUEST_TIMEOUT_SECONDS: {{ .Values.dsh.requestTimeoutSeconds | quote }}
+  DSH_MAX_PROMPT_CHARS: {{ .Values.dsh.maxPromptChars | quote }}
+  DSH_MODELS: {{ .Values.dsh.llm.models | toJson | quote }}
+  {{- if .Values.dsh.uploads.enabled }}
+  DSH_UPLOAD_ROOT: "/data/dsh"
+  DSH_UPLOAD_MOUNT: {{ .Values.dsh.uploads.mount | quote }}
+  DSH_UPLOAD_MAX_BYTES: {{ .Values.dsh.uploads.maxBytes | int64 | quote }}
+  DSH_UPLOAD_MAX_FILES: {{ .Values.dsh.uploads.maxFiles | quote }}
+  DSH_UPLOAD_RETENTION_DAYS: {{ .Values.dsh.uploads.retentionDays | quote }}
+  DSH_UPLOAD_MAX_FILES_PER_USER: {{ .Values.dsh.uploads.maxFilesPerUser | quote }}
+  {{- end }}
+  {{- end }}
   {{- if eq (toString (default "postgres" .Values.database.mode)) "sqlite" }}
   SQLITE_PATH: "/data/medrouter.db"
   {{- end }}

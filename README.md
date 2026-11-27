@@ -13,6 +13,7 @@ MedRouter 是一个面向 AI 模型的托管与分享平台（目标类似 Huggi
 - 数据集库列表 `/datasets` 与详情 `/datasets/$name`：读取 CubeStack `Dataset`，按语义名合并版本，展示格式、体积、记录数、版本与访问/去标识化/伦理等边界信息；与模型库独立降级
 - 数据集 / 模型文件浏览（配置 S3 后启用）：在详情页「文件」tab 读取 `Dataset.spec.storage.s3.uri` 或 `ModelVersion.spec.storage.s3.uri`，按目录分页浏览；浏览公开，下载需登录并由后端签发短期预签名 URL
 - 工作室 `/studio`：模型与数据集目录的入口页，展示两个目录的最近更新与接入状态；运行态、配额与审计尚未接入，页面明确标注而不展示估算数值
+- 对话 `/chat`：接入部署在集群里的 DeepSeek Harness（dsh）智能体，支持多轮会话、模型切换、预设、附件上传与产物下载；镜像内置演示文稿/医学写作/临床试验技能；对话历史存在浏览器，工作区、会话归属与产物按用户隔离
 - 首页内容暂留空，仅保留站点导航
 - 生产模式由 Go 二进制内嵌前端静态资源，并支持部署在子路径（`BASE_PATH`）
 
@@ -40,6 +41,7 @@ MedRouter 是一个面向 AI 模型的托管与分享平台（目标类似 Huggi
 │   ├── middleware/          # 鉴权、同源校验、请求体限制
 │   ├── router/              # 路由装配
 │   └── webui/               # SPA 静态资源与 fallback
+├── images/dsh/              # DSH 运行时镜像（dsh + dsh-api 插件 + Office 技能）
 ├── helm/medrouter-chart/     # Kubernetes Helm Chart
 └── web/                     # Rsbuild 前端
 ```
@@ -113,6 +115,8 @@ Go 会在 SPA HTML 中注入 `<base href="/medrouter/">` 和 `window.__BASE_PATH
 ## Kubernetes / Helm
 
 `helm/medrouter-chart` 默认部署一套由 [CloudNativePG](https://cloudnative-pg.io/) 管理的高可用 PostgreSQL：Chart 内嵌 CloudNativePG operator 子 Chart，并渲染 `Cluster` CR（一主多从、流复制、自动故障切换、自签名 TLS）。MedRouter 本身仍是无状态单容器，可随 PostgreSQL 一起扩缩容。
+
+可选的 DSH 智能体运行时（`dsh.enabled=true`）由同一个 Chart 部署：默认只调度到 master/control-plane、可渲染 HPA、与 MedRouter 共享一个 RWX 数据卷用于用户工作区和附件。见 [Chart README 的 DSH 章节](helm/medrouter-chart/README.md#dsh-智能体对话页)。
 
 ```bash
 helm install medrouter ./helm/medrouter-chart \
@@ -206,6 +210,17 @@ CI 工作流 [`.github/workflows/kind-postgres.yaml`](.github/workflows/kind-pos
 | `S3_DOWNLOAD_DAILY_QUOTA_BYTES` | `107374182400` | 单用户 24h 下载配额（100 GiB）；`0` 不限 |
 | `S3_DOWNLOAD_LARGE_THRESHOLD_BYTES` | `2147483648` | 超过此大小使用更长的下载 URL 有效期 |
 | `S3_DOWNLOAD_LARGE_TTL_SECONDS` | `3600` | 大文件的下载 URL 有效期 |
+| `DSH_ENABLED` | `false` | 启用「对话」页与 dsh 运行时转发 |
+| `DSH_BASE_URL` | 空 | dsh-api 地址（无路径），启用时必填 |
+| `DSH_HEADLESS_HOST` | 空 | headless Service 的 `host:port`；多副本时按用户 id 固定 Pod |
+| `DSH_API_KEY` | 空 | 与 dsh-api 共享的 `X-API-Key` |
+| `DSH_REQUEST_TIMEOUT_SECONDS` | `15` | 单次 dsh-api 调用超时（提交是异步的） |
+| `DSH_DEFAULT_PRESET` | `standard` | 未指定预设时的默认值 |
+| `DSH_MAX_PROMPT_CHARS` | `100000` | 单条消息字符上限 |
+| `DSH_MODELS` | 两个 DeepSeek 模型 | 对话页模型下拉（JSON，第一项为默认；需与镜像 `overlay.yml` 一致） |
+| `DSH_UPLOAD_ROOT` / `DSH_UPLOAD_MOUNT` | 空 | 与 dsh 共享的上传卷：网关侧路径 / 容器内路径，必须同时设置 |
+| `DSH_UPLOAD_MAX_BYTES` / `DSH_UPLOAD_MAX_FILES` | `25 MiB` / `10` | 单文件大小与每轮附件数上限 |
+| `DSH_UPLOAD_RETENTION_DAYS` / `DSH_UPLOAD_MAX_FILES_PER_USER` | `7` / `200` | 每小时清理策略；`0` 关闭对应规则 |
 
 数据库在启动时通过 GORM `AutoMigrate` 自动建表；SQLite 默认开启 WAL 与 `busy_timeout`，并将连接数限制为 1（仅适合单实例）。
 
@@ -394,6 +409,12 @@ datasetFiles:
 | `GET` | `/api/datasets/:name/files/download` | 签发某个文件的预签名 URL（需登录；`ref`、`path`；`proxy` 模式返回 `mode:"proxy"`） |
 | `GET` | `/api/datasets/:name/files/preview` | 数据集文件预览（需登录；文本返回前 256 KiB，图片/PDF 返回 `content_url`） |
 | `GET` | `/api/datasets/:name/files/content` | 同源流式读取图片/PDF（需登录；支持 `Range`；`download=1` 走代理下载） |
+| `GET` | `/api/chat/status` | 智能体是否启用、预设与上传限制（需登录） |
+| `POST` | `/api/chat/tasks` | 提交一轮对话 `{prompt,sessionId?,preset?,attachments?}`（需登录） |
+| `GET` | `/api/chat/tasks/:id` | 轮询任务状态、回复、工具调用与产物（需登录；按用户隔离） |
+| `DELETE` | `/api/chat/tasks/:id` | 请求中止当前轮次（需登录） |
+| `GET` | `/api/chat/tasks/:id/files/:key` | 同源代理下载本轮产物（需登录） |
+| `POST` | `/api/chat/uploads` | 上传单个附件（multipart，需登录；需配置共享卷） |
 
 ## 测试
 
@@ -408,6 +429,7 @@ make check      # go vet + tsc + tests
 - 数据集文件浏览测试覆盖 S3 列表投影、相对路径与越权校验、错误分类、预签名下载与未登录 401。
 - 模型文件浏览复用同一套 `FileService`，测试覆盖模型版本解析、HostPath 不支持、预签名下载与未登录 401。
 - 前端测试覆盖安全跳转、表单校验规则、品牌组件，以及模型/数据集的筛选、排序与搜索参数解析。
+- DSH 测试覆盖身份透传、错误信封映射、任务/产物 id 校验、用户哈希选路、上传路径越权与清理规则；路由级测试验证未登录 401、附件归属隔离与产物代理下载。
 - PostgreSQL 可通过 `SQL_DSN=postgres://... go run .` 手动验证；自动化测试目前只使用 SQLite。
 
 ## 安全说明

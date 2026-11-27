@@ -22,6 +22,7 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
+import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as DatasetsIndexRouteImport } from './routes/datasets.index'
 import { Route as DatasetsNameRouteImport } from './routes/datasets.$name'
@@ -91,6 +92,11 @@ const authSignUpRoute = authSignUpRouteImport.update({
   path: '/sign-up',
   getParentRoute: () => authRouteRoute,
 } as any)
+const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/user-agreement': typeof UserAgreementRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
+  '/chat': typeof AuthenticatedChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/datasets/$name': typeof DatasetsNameRoute
   '/models/$name': typeof ModelsNameRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/user-agreement': typeof UserAgreementRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
+  '/chat': typeof AuthenticatedChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/datasets/$name': typeof DatasetsNameRoute
   '/models/$name': typeof ModelsNameRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/user-agreement': typeof UserAgreementRoute
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-up': typeof authSignUpRoute
+  '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/datasets/$name': typeof DatasetsNameRoute
   '/models/$name': typeof ModelsNameRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/user-agreement'
     | '/sign-in'
     | '/sign-up'
+    | '/chat'
     | '/dashboard'
     | '/datasets/$name'
     | '/models/$name'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/user-agreement'
     | '/sign-in'
     | '/sign-up'
+    | '/chat'
     | '/dashboard'
     | '/datasets/$name'
     | '/models/$name'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/user-agreement'
     | '/(auth)/sign-in'
     | '/(auth)/sign-up'
+    | '/_authenticated/chat'
     | '/_authenticated/dashboard'
     | '/datasets/$name'
     | '/models/$name'
@@ -336,6 +348,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authSignUpRouteImport
       parentRoute: typeof authRouteRoute
     }
+    '/_authenticated/chat': {
+      id: '/_authenticated/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -389,10 +408,12 @@ const authRouteRouteWithChildren = authRouteRoute._addFileChildren(
 )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
 }
 

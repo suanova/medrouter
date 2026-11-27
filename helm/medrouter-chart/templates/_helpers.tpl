@@ -376,4 +376,120 @@ ConfigMap, which is always rendered.
 {{- fail (printf "config.extra.%s conflicts with a key managed by the chart; set the top-level value instead" $key) -}}
 {{- end -}}
 {{- end -}}
+
+{{- include "medrouter.validateDsh" . -}}
+{{- end -}}
+
+{{/*
+DSH runtime resource names.
+*/}}
+{{- define "medrouter.dshName" -}}
+{{- printf "%s-dsh" (include "medrouter.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "medrouter.dshHeadlessName" -}}
+{{- printf "%s-dsh-headless" (include "medrouter.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "medrouter.dshPVCName" -}}
+{{- printf "%s-dsh-data" (include "medrouter.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Effective minimum dsh replica count. The HPA owns scaling when enabled, but
+the PDB and validation use the floor.
+*/}}
+{{- define "medrouter.dshMinReplicas" -}}
+{{- if .Values.dsh.autoscaling.enabled -}}
+{{- int (default 1 .Values.dsh.autoscaling.minReplicas) -}}
+{{- else -}}
+{{- int (default 1 .Values.dsh.replicaCount) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render-time validation for the DSH runtime. Called from medrouter.validate.
+*/}}
+{{- define "medrouter.validateDsh" -}}
+{{- if .Values.dsh.enabled -}}
+{{- if not (trim (toString .Values.dsh.image.repository)) -}}
+{{- fail "dsh.image.repository is required when dsh.enabled=true" -}}
+{{- end -}}
+
+{{- $replicas := int (default 1 .Values.dsh.replicaCount) -}}
+{{- if lt $replicas 1 -}}
+{{- fail "dsh.replicaCount must be at least 1" -}}
+{{- end -}}
+
+{{- $min := int (default 1 .Values.dsh.autoscaling.minReplicas) -}}
+{{- $max := int (default 1 .Values.dsh.autoscaling.maxReplicas) -}}
+{{- if .Values.dsh.autoscaling.enabled -}}
+{{- if lt $min 1 -}}
+{{- fail "dsh.autoscaling.minReplicas must be at least 1" -}}
+{{- end -}}
+{{- if lt $max $min -}}
+{{- fail "dsh.autoscaling.maxReplicas must be greater than or equal to minReplicas" -}}
+{{- end -}}
+{{- $cpuTarget := int (default 0 .Values.dsh.autoscaling.targetCPUUtilizationPercentage) -}}
+{{- $memTarget := trim (toString .Values.dsh.autoscaling.targetMemoryUtilizationPercentage) -}}
+{{- if and (le $cpuTarget 0) (not $memTarget) -}}
+{{- fail "dsh.autoscaling.enabled=true needs at least one metric: set targetCPUUtilizationPercentage or targetMemoryUtilizationPercentage" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $accessModes := default (list) .Values.dsh.persistence.accessModes -}}
+{{- $rwx := has "ReadWriteMany" $accessModes -}}
+{{- $multiReplica := or (gt $replicas 1) (and .Values.dsh.autoscaling.enabled (gt $max 1)) -}}
+{{- if and $multiReplica (not .Values.dsh.persistence.existingClaim) (not $rwx) -}}
+{{- fail "dsh: more than one replica needs dsh.persistence.accessModes to include ReadWriteMany (or an existingClaim backed by shared storage); dsh-api keeps task state in memory and sessions on the volume" -}}
+{{- end -}}
+
+{{- if .Values.dsh.uploads.enabled -}}
+{{- if not (or .Values.dsh.persistence.enabled .Values.dsh.persistence.existingClaim) -}}
+{{- fail "dsh.uploads.enabled=true requires dsh.persistence.enabled=true (or existingClaim): MedRouter writes attachments into the volume the dsh pod reads" -}}
+{{- end -}}
+{{- if and (not .Values.dsh.persistence.existingClaim) (not $rwx) -}}
+{{- fail "dsh.uploads.enabled=true mounts the same volume in the dsh and MedRouter pods; dsh.persistence.accessModes must include ReadWriteMany (or use an existingClaim backed by shared storage)" -}}
+{{- end -}}
+{{- if lt (int (default 0 .Values.dsh.uploads.maxBytes)) 1 -}}
+{{- fail "dsh.uploads.maxBytes must be at least 1" -}}
+{{- end -}}
+{{- if lt (int (default 0 .Values.dsh.uploads.maxFiles)) 1 -}}
+{{- fail "dsh.uploads.maxFiles must be at least 1" -}}
+{{- end -}}
+{{- if not (hasPrefix "/" (toString .Values.dsh.uploads.mount)) -}}
+{{- fail "dsh.uploads.mount must be an absolute path inside the dsh container (for example /data/uploads)" -}}
+{{- end -}}
+{{- end -}}
+
+{{- if .Values.secret.create -}}
+{{- if not (trim (toString .Values.secrets.DSH_DEEPSEEK_API_KEY)) -}}
+{{- fail "dsh.enabled=true needs a model key: set secrets.DSH_DEEPSEEK_API_KEY, or set secret.create=false with an existing Secret that contains DSH_DEEPSEEK_API_KEY and DSH_API_KEY" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $defaultTimeout := int (default 0 .Values.dsh.agent.defaultTimeoutSeconds) -}}
+{{- $maxTimeout := int (default 0 .Values.dsh.agent.maxTimeoutSeconds) -}}
+{{- if or (lt $defaultTimeout 1) (lt $maxTimeout $defaultTimeout) -}}
+{{- fail "dsh.agent timeouts must be positive and maxTimeoutSeconds >= defaultTimeoutSeconds" -}}
+{{- end -}}
+{{- if lt (int (default 0 .Values.dsh.agent.maxConcurrent)) 1 -}}
+{{- fail "dsh.agent.maxConcurrent must be at least 1" -}}
+{{- end -}}
+
+{{- $models := default (list) .Values.dsh.llm.models -}}
+{{- if not $models -}}
+{{- fail "dsh.llm.models must list at least one model for the Chat page picker" -}}
+{{- end -}}
+{{- range $model := $models -}}
+{{- if not (trim (toString $model.id)) -}}
+{{- fail "dsh.llm.models entries need a non-empty id" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $port := int (toString .Values.dsh.service.port) -}}
+{{- if or (lt $port 1) (gt $port 65535) -}}
+{{- fail (printf "dsh.service.port must be a TCP port, got %q" (toString .Values.dsh.service.port)) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}

@@ -84,7 +84,7 @@ MedRouter has been deployed as release {{ .Release.Name }} in namespace {{ .Rele
      all existing sessions. Set secrets.SESSION_SECRET to manage it yourself.
 {{- else }}
    - Credentials are read from the pre-existing Secret
-     {{ include "medrouter.secretName" . }}; it must contain SESSION_SECRET{{ if eq $mode "external" }} and SQL_DSN{{ end }}.
+     {{ include "medrouter.secretName" . }}; it must contain SESSION_SECRET{{ if eq $mode "external" }} and SQL_DSN{{ end }}{{ if .Values.dsh.enabled }}, DSH_API_KEY and DSH_DEEPSEEK_API_KEY{{ end }}.
 {{- end }}
 {{- if eq (toString .Values.config.EMAIL_VERIFICATION_ENABLED) "false" }}
    - Email verification is DISABLED: the email field is displayed but accounts
@@ -139,6 +139,21 @@ MedRouter has been deployed as release {{ .Release.Name }} in namespace {{ .Rele
    - Dataset library is DISABLED; the UI shows a disabled state and no dataset
      RBAC is created.
 {{- end }}
+{{- if .Values.dsh.enabled }}
+   - DSH agent: Deployment {{ include "medrouter.dshName" . }} runs on
+     {{- if .Values.dsh.scheduling.masterOnly }} master/control-plane nodes{{ else }} the configured nodes{{ end }}
+     and serves the Chat page at {{ $origin }}{{ $base }}/chat.
+     Data (DSH_HOME, user workspaces, sessions{{ if .Values.dsh.uploads.enabled }}, uploads{{ end }}) lives on
+     PVC {{ .Values.dsh.persistence.existingClaim | default (include "medrouter.dshPVCName" .) }}.
+     {{- if .Values.dsh.autoscaling.enabled }}
+     The HPA scales {{ include "medrouter.dshName" . }} between
+     {{ .Values.dsh.autoscaling.minReplicas }} and {{ .Values.dsh.autoscaling.maxReplicas }} replicas.
+     MedRouter pins a user id to one pod; scaling in can interrupt in-flight turns.
+     {{- end }}
+{{- else }}
+   - DSH agent is DISABLED; the Chat page shows a disabled state. Enable it with
+     --set dsh.enabled=true and a DeepSeek key.
+{{- end }}
 
 4. Useful values:
 
@@ -155,3 +170,8 @@ MedRouter has been deployed as release {{ .Release.Name }} in namespace {{ .Rele
    --set modelLibrary.rbac.create=false     manage CubeStack read RBAC yourself
    --set datasetLibrary.enabled=false       disable the dataset library and its RBAC
    --set datasetLibrary.rbac.create=false   manage Dataset read RBAC yourself
+   --set dsh.enabled=true                   run the DSH agent runtime and the Chat page
+   --set secrets.DSH_DEEPSEEK_API_KEY=...   model key used inside the dsh pod
+   --set dsh.uploads.enabled=false          disable chat attachments (no shared RWX volume needed)
+   --set dsh.autoscaling.enabled=true       let an HPA scale the dsh deployment
+   --set dsh.scheduling.masterOnly=false    schedule dsh on any node
