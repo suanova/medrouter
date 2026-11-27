@@ -63,7 +63,9 @@ jobs:
   dsh-image:
     name: Build and push DSH preview image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The image is ~2 GB and the Harbor push can be slow; the previous 60m cap
+    # cancelled a build while it was exporting to the registry.
+    timeout-minutes: 120
     env:
       IMAGE: harbor.isuanova.com/suanova/medrouter-dsh
       HAS_REGISTRY_CREDS: ${{ secrets.CI_BOT_PASSWORD != '' && vars.CI_BOT_NAME != '' }}
