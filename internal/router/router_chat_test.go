@@ -182,7 +182,9 @@ func TestChatFlowScopesEveryCallToTheSignedInUser(t *testing.T) {
 	// service may be offered and used.
 	const aliceService = "biomistral-7b-u1-svc"
 	seedInference(t, aliceID, aliceService, "biomistral-7b-medmcqa-u3-lora", model.WorkspaceRunning)
-	seedInference(t, aliceID, "stopped-u1-svc", "stopped", model.WorkspaceStopped)
+	// A stopped service on another account must not reach the runtime catalog;
+	// one-per-kind also means Alice cannot have a second inference row.
+	seedInference(t, 99, "stopped-u99-svc", "stopped", model.WorkspaceStopped)
 
 	_, env := app.request(http.MethodGet, "/api/chat/status", nil)
 	app.mustSuccess(env, "chat status")
@@ -245,7 +247,7 @@ func TestChatFlowScopesEveryCallToTheSignedInUser(t *testing.T) {
 
 	// A model outside the caller's running set is rejected before it reaches
 	// the runtime: unknown, stopped, or another account's.
-	for _, bad := range []string{"not-a-model", "stopped-u1-svc"} {
+	for _, bad := range []string{"not-a-model", "stopped-u99-svc"} {
 		_, badEnv := app.request(http.MethodPost, "/api/chat/tasks", map[string]any{
 			"prompt": "hi",
 			"model":  bad,
@@ -360,7 +362,7 @@ func TestChatFlowScopesEveryCallToTheSignedInUser(t *testing.T) {
 		t.Fatalf("catalog = %+v", catalog.Models)
 	}
 	for _, entry := range catalog.Models {
-		if entry.ID == "stopped-u1-svc" {
+		if entry.ID == "stopped-u99-svc" {
 			t.Fatalf("catalog must not include stopped services: %+v", catalog.Models)
 		}
 	}

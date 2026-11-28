@@ -97,6 +97,19 @@ jobs:
           grep -q "node-role.kubernetes.io/control-plane" /tmp/dsh.yaml
           grep -q "ReadWriteMany" /tmp/dsh.yaml
           grep -q "mountPath: /data/dsh" /tmp/dsh.yaml
+          # The API server rejects a probe whose exec.command element parsed as
+          # a YAML map (an unquoted "X-API-Key: ..." does exactly that). Check
+          # the rendered types here; helm lint does not.
+          ruby -ryaml -e '
+            docs = YAML.load_stream(File.read("/tmp/dsh.yaml"))
+            d = docs.find { |x| x.is_a?(Hash) && x["kind"] == "Deployment" && x.dig("metadata", "name") == "medrouter-dsh" }
+            abort("missing dsh deployment") unless d
+            c = d.dig("spec", "template", "spec", "containers").first
+            %w[startupProbe readinessProbe livenessProbe].each do |p|
+              cmd = c.dig(p, "exec", "command")
+              abort("#{p} exec.command must be a list of strings") unless cmd.is_a?(Array) && cmd.all? { |x| x.is_a?(String) }
+            end
+          '
           if grep -q "kind: HorizontalPodAutoscaler" /tmp/dsh.yaml; then
             echo "HPA must not render unless dsh.autoscaling.enabled=true"
             exit 1

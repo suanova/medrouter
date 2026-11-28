@@ -172,10 +172,10 @@ func (s *WorkspaceService) CreateVersion(ctx context.Context, ownerID int64, sou
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read the favorite")
 	}
 
-	// A model can be launched more than once on purpose: fine-tuning it and
-	// deploying it are two workspaces. The idempotency key is therefore the
-	// workspace kind the request asks for, not just the source — otherwise a
-	// deploy returns the fine-tune that is already running and creates nothing.
+	// A model may be launched twice only when the kinds differ: deploying it
+	// and fine-tuning it are two workspaces. Within one kind each user holds a
+	// single workspace, so a second favorite of the same kind is refused until
+	// the existing one is deleted.
 	kind := WorkspaceNotebook
 	if sourceKind == FavoriteModel {
 		if strings.TrimSpace(datasetName) == "" {
@@ -185,11 +185,13 @@ func (s *WorkspaceService) CreateVersion(ctx context.Context, ownerID int64, sou
 		}
 	}
 	var existing model.Workspace
-	err = model.DB.Where("owner_id = ? AND kind = ? AND source_kind = ? AND source_name = ?", ownerID, kind, sourceKind, sourceName).
-		First(&existing).Error
+	err = model.DB.Where("owner_id = ? AND kind = ?", ownerID, kind).First(&existing).Error
 	if err == nil {
-		dto := toWorkspaceDTO(existing)
-		return &dto, nil
+		if existing.SourceKind == sourceKind && existing.SourceName == sourceName && sameFinetuneDataset(existing, datasetName) {
+			dto := toWorkspaceDTO(existing)
+			return &dto, nil
+		}
+		return nil, workspaceKindLimitError(kind, existing.Name)
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read workspaces")
@@ -253,6 +255,9 @@ func (s *WorkspaceService) CreateVersion(ctx context.Context, ownerID int64, sou
 		// The environment exists but is untracked. Delete it so a retry starts
 		// clean rather than leaving an orphan nobody can manage.
 		_ = s.cluster.DeleteDevEnvironment(context.WithoutCancel(ctx), s.cfg.StudioNamespace, name)
+		if isWorkspaceKindConflict(err) {
+			return nil, workspaceKindLimitError(WorkspaceNotebook, "")
+		}
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to record the workspace")
 	}
 	dto := toWorkspaceDTO(row)
@@ -709,10 +714,57 @@ func (s *WorkspaceService) createFinetune(ctx context.Context, ownerID int64, mo
 	}
 	if err := model.DB.Create(&row).Error; err != nil {
 		_ = s.cluster.DeleteJob(context.WithoutCancel(ctx), s.cfg.StudioNamespace, name)
+		if isWorkspaceKindConflict(err) {
+			return nil, workspaceKindLimitError(WorkspaceFinetune, "")
+		}
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to record the workspace")
 	}
 	dto := toWorkspaceDTO(row)
 	return &dto, nil
+}
+
+// sameFinetuneDataset reports whether an existing fine-tune was started with
+// the same dataset. A different dataset is a different training request, so it
+// hits the one-per-kind limit instead of silently returning the old run.
+func sameFinetuneDataset(existing model.Workspace, datasetName string) bool {
+	if existing.Kind != WorkspaceFinetune {
+		return true
+	}
+	var matched MatchedResources
+	if err := json.Unmarshal([]byte(existing.Matched), &matched); err != nil {
+		return true
+	}
+	return matched.Dataset == datasetName
+}
+
+// workspaceKindLimitError is the one-workspace-per-kind rule's response. name is
+// empty when the conflict is only visible as a unique-index violation.
+func workspaceKindLimitError(kind, name string) *common.APIError {
+	label := map[string]string{
+		WorkspaceNotebook:  "environment",
+		WorkspaceInference: "inference service",
+		WorkspaceFinetune:  "fine-tune",
+	}[kind]
+	if label == "" {
+		label = kind
+	}
+	message := fmt.Sprintf("You already have a %s workspace; delete it before starting another", label)
+	if name != "" {
+		message = fmt.Sprintf("You already have a %s workspace (%s); delete it before starting another", label, name)
+	}
+	return common.NewAPIErrorStatus(http.StatusConflict, "WORKSPACE_LIMIT_REACHED", message)
+}
+
+// isWorkspaceKindConflict recognizes the unique-index violation from SQLite and
+// PostgreSQL, which can only happen when two launches race.
+func isWorkspaceKindConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "idx_workspaces_owner_kind") ||
+		strings.Contains(message, "unique constraint failed: workspaces.owner_id") ||
+		(strings.Contains(message, "duplicate key") && strings.Contains(message, "workspaces"))
 }
 
 func (s *WorkspaceService) checkQuota(ownerID int64) *common.APIError {

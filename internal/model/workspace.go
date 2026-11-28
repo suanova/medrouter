@@ -17,14 +17,16 @@ const (
 	WorkspaceReady   = "ready"
 )
 
-// Workspace is one launched environment derived from a favorite. A favorite
-// owns at most one workspace, which the unique index enforces.
+// Workspace is one launched environment derived from a favorite. Each user may
+// hold at most one workspace per kind (notebook, inference, finetune); the
+// unique index on (owner_id, kind) is created in InitDB because it cannot be
+// added to an existing database that still holds duplicate rows.
 type Workspace struct {
 	ID           int64     `gorm:"primaryKey" json:"id"`
-	OwnerID      int64     `gorm:"not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:1" json:"-"`
-	Kind         string    `gorm:"size:16;not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:2" json:"kind"`
-	SourceKind   string    `gorm:"size:16;not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:3" json:"source_kind"`
-	SourceName   string    `gorm:"size:128;not null;uniqueIndex:idx_workspaces_owner_kind_source,priority:4" json:"source_name"`
+	OwnerID      int64     `gorm:"not null" json:"-"`
+	Kind         string    `gorm:"size:16;not null" json:"kind"`
+	SourceKind   string    `gorm:"size:16;not null" json:"source_kind"`
+	SourceName   string    `gorm:"size:128;not null" json:"source_name"`
 	Name         string    `gorm:"size:128;not null" json:"name"`
 	Namespace    string    `gorm:"size:128;not null" json:"namespace"`
 	Phase        string    `gorm:"size:16;not null" json:"phase"`

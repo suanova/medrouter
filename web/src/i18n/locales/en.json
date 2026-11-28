@@ -597,7 +597,8 @@
     "lead": "Star the models and datasets you care about, then start them from here. The runtime, the card count and the image are matched for you — there is nothing to configure.",
     "headNotes": {
       "running": "{{count}} running",
-      "favorites": "{{count}} starred"
+      "favorites": "{{count}} starred",
+      "perKind": "One workspace per kind"
     },
     "actions": {
       "models": "Models",

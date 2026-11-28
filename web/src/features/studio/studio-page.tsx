@@ -80,6 +80,7 @@ export function StudioPage() {
   const notes = [
     t('studio.headNotes.running', { count: running }),
     t('studio.headNotes.favorites', { count: favorites.length }),
+    t('studio.headNotes.perKind'),
   ]
 
   const workspaceFor = (favorite: Favorite, kind: Workspace['kind']) =>

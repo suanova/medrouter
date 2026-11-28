@@ -171,6 +171,9 @@ func (s *WorkspaceService) createInference(ctx context.Context, ownerID int64, m
 	}
 	if err := model.DB.Create(&row).Error; err != nil {
 		_ = s.cluster.DeleteInferenceService(context.WithoutCancel(ctx), s.cfg.StudioNamespace, name)
+		if isWorkspaceKindConflict(err) {
+			return nil, workspaceKindLimitError(WorkspaceInference, "")
+		}
 		return nil, common.NewAPIErrorStatus(http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to record the workspace")
 	}
 	dto := toWorkspaceDTO(row)

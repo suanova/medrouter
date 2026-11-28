@@ -305,16 +305,57 @@ func TestWorkspaceQuota(t *testing.T) {
 	cfg := studioConfig(false)
 	cfg.StudioMaxWorkspaces = 1
 	starDataset(t, 1, "pubmedqa")
-	starDataset(t, 1, "chembl")
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star model: %v", apiErr)
+	}
 	cluster := &fakeNotebooks{}
-	svc := NewWorkspaceService(cfg, cluster, nil)
+	svc := NewWorkspaceService(cfg, cluster, nil).
+		WithDeployment(deployableModel, runtimeProfiles)
 
 	if _, apiErr := svc.Create(context.Background(), 1, FavoriteDataset, "pubmedqa", ""); apiErr != nil {
 		t.Fatalf("first: %v", apiErr)
 	}
-	_, apiErr := svc.Create(context.Background(), 1, FavoriteDataset, "chembl", "")
+	// A different kind is allowed by the one-per-kind rule, so the per-user
+	// quota is what stops it.
+	_, apiErr := svc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", "")
 	if apiErr == nil || apiErr.Code != "QUOTA_EXCEEDED" {
 		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
+
+func TestWorkspaceOnePerKind(t *testing.T) {
+	favoriteTestDB(t)
+	if !model.DB.Migrator().HasIndex(&model.Workspace{}, "idx_workspaces_owner_kind") {
+		t.Fatal("the one-per-kind unique index was not created")
+	}
+	starDataset(t, 1, "pubmedqa")
+	starDataset(t, 1, "chembl")
+	cluster := &fakeNotebooks{}
+	svc := NewWorkspaceService(studioConfig(false), cluster, nil)
+
+	first, apiErr := svc.Create(context.Background(), 1, FavoriteDataset, "pubmedqa", "")
+	if apiErr != nil {
+		t.Fatalf("first notebook: %v", apiErr)
+	}
+	// A second environment is refused, whatever the dataset.
+	_, apiErr = svc.Create(context.Background(), 1, FavoriteDataset, "chembl", "")
+	if apiErr == nil || apiErr.Code != "WORKSPACE_LIMIT_REACHED" {
+		t.Fatalf("second notebook: %+v", apiErr)
+	}
+	// Launching the same favorite again stays idempotent.
+	again, apiErr := svc.Create(context.Background(), 1, FavoriteDataset, "pubmedqa", "")
+	if apiErr != nil || again.ID != first.ID {
+		t.Fatalf("idempotent notebook = %+v / %v", again, apiErr)
+	}
+
+	// A different kind is allowed (dry-run avoids a second cluster object).
+	if _, apiErr := NewFavoriteService().Add(1, FavoriteModel, "biomistral-7b"); apiErr != nil {
+		t.Fatalf("star model: %v", apiErr)
+	}
+	planSvc := NewWorkspaceService(studioConfig(true), nil, nil).
+		WithDeployment(deployableModel, runtimeProfiles)
+	if _, apiErr := planSvc.Create(context.Background(), 1, FavoriteModel, "biomistral-7b", ""); apiErr != nil {
+		t.Fatalf("inference plan: %v", apiErr)
 	}
 }
 
