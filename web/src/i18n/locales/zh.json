@@ -591,7 +591,8 @@
     "lead": "先收藏你在意的模型或数据集，然后在这里一键启动。运行时、卡数和镜像都由后台匹配，不需要你做选择。",
     "headNotes": {
       "running": "{{count}} 个运行中",
-      "favorites": "已收藏 {{count}} 个"
+      "favorites": "已收藏 {{count}} 个",
+      "perKind": "推理/环境/微调各一个"
     },
     "actions": {
       "models": "模型",

@@ -163,7 +163,8 @@ studio:
   notebookEgress: true
   # PVC naming convention produced by the dataset caching layer.
   datasetPVCPattern: "%s-data"
-  # Per-user soft limit on active workspaces.
+  # Per-user limit on active workspaces across all kinds. Each kind (inference,
+  # notebook, finetune) is additionally limited to one workspace per user.
   maxWorkspaces: 3
   reconcileIntervalSeconds: 3
   requestTimeoutSeconds: 10

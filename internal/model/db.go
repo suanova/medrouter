@@ -83,11 +83,19 @@ func InitDB(cfg *config.Config) error {
 	}
 
 	// The first workspace index keyed (owner, source) only, which prevented a
-	// model from having both a deployment and a fine-tune. Kind is part of the
-	// key now; drop the old one first (ignored when absent).
+	// model from having both a deployment and a fine-tune.
 	_ = db.Migrator().DropIndex(&Workspace{}, "idx_workspaces_owner_source")
 	if err := db.AutoMigrate(&User{}, &UserSession{}, &VerificationCode{}, &OAuthBinding{}, &Favorite{}, &Workspace{}); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
+	}
+	// One workspace per (owner, kind). Created outside AutoMigrate so an
+	// older database that still contains duplicates can start: the index is
+	// skipped with a warning, and the service layer still enforces the rule.
+	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_owner_kind ON workspaces (owner_id, kind)").Error; err != nil {
+		log.Printf("WARN workspaces: the one-per-kind index was not created; remove duplicate rows and restart: %v", err)
+	} else {
+		// The per-favorite index it replaced is no longer the rule.
+		_ = db.Migrator().DropIndex(&Workspace{}, "idx_workspaces_owner_kind_source")
 	}
 	DB = db
 
